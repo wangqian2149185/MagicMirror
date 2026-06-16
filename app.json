@@ -1,0 +1,30 @@
+{
+  "expo": {
+    "name": "Personality Portrait",
+    "slug": "personality-portrait",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "scheme": "portraitapp",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.local.personalityportrait",
+      "infoPlist": {
+        "NSSpeechRecognitionUsageDescription": "Voice input lets you answer open interview questions by speaking.",
+        "NSMicrophoneUsageDescription": "The microphone is used only when you choose voice input for an answer."
+      }
+    },
+    "plugins": [
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Allow Personality Portrait to use the microphone for spoken answers.",
+          "speechRecognitionPermission": "Allow Personality Portrait to turn spoken answers into text."
+        }
+      ]
+    ]
+  }
+}
