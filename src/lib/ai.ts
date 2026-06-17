@@ -1,6 +1,8 @@
 import { AppConfig, ChatMessage, MbtiAssessment, ModuleAnalysis } from "../types";
 import { getProvider } from "../data/providers";
 
+type OutputLanguage = "en" | "zh";
+
 const compactJson = (value: unknown) => JSON.stringify(value, null, 2);
 
 const extractJson = (text: string) => {
@@ -93,8 +95,8 @@ export const callModel = async (config: AppConfig, messages: ChatMessage[]) => {
     headers.Authorization = `Bearer ${config.apiKey.trim()}`;
   }
   if (config.providerId === "openrouter") {
-    headers["HTTP-Referer"] = "https://github.com/local/personality-portrait-mobile";
-    headers["X-Title"] = "Personality Portrait Mobile";
+    headers["HTTP-Referer"] = "https://github.com/wangqian2149185/MagicMirror";
+    headers["X-Title"] = "MagicMirror";
   }
 
   const response = await fetch(`${baseUrl}/chat/completions`, {
@@ -120,8 +122,13 @@ export const analyzeModule = async (
     answers: unknown[];
     yesNoQuestions: string[];
     detect: string[];
+    language?: OutputLanguage;
   }
 ): Promise<ModuleAnalysis> => {
+  const outputRule =
+    args.language === "zh"
+      ? "Return all human-facing JSON string values in Simplified Chinese. Keep yes/no question strings exactly as provided."
+      : "Return all human-facing JSON string values in English.";
   const prompt = `Analyze this interview module and predict likely yes/no calibration answers.
 
 Return only JSON with this shape:
@@ -135,6 +142,7 @@ Return only JSON with this shape:
   ]
 }
 
+Language rule: ${outputRule}
 Module: ${args.title}
 Purpose: ${args.purpose}
 Patterns to consider, not force: ${args.detect.join(", ")}
@@ -169,8 +177,13 @@ export const rephraseQuestion = async (
     question: string;
     previousWording?: string;
     kind: "open" | "rating" | "yesno";
+    language?: OutputLanguage;
   }
 ) => {
+  const outputRule =
+    args.language === "zh"
+      ? "Return the rephrased question in Simplified Chinese."
+      : "Return the rephrased question in English.";
   const prompt = `Rephrase this interview question without changing its intent.
 
 Rules:
@@ -180,6 +193,7 @@ Rules:
 - If it is a yes/no question, keep it answerable with YES or NO.
 - If it is a 1-10 scoring question, keep the same 1-10 scale.
 - You may add a short concrete example only if it clarifies the same intent.
+- ${outputRule}
 
 Question type: ${args.kind}
 Original question: ${args.question}
@@ -203,12 +217,30 @@ export const generateFinalReport = async (
   args: {
     answers: unknown[];
     analyses: unknown[];
+    language?: OutputLanguage;
   }
 ) => {
-  const prompt = `Create the final report as Markdown using this exact structure:
-***Reference only. This result is for self-reflection and the app is not responsible for decisions, outcomes, or interpretations based on it.***
-
-# Personality Portrait
+  const isChinese = args.language === "zh";
+  const disclaimer = isChinese
+    ? "***仅供参考。本结果只用于自我反思，应用不对基于本结果作出的决定、后果或解释负责。***"
+    : "***Reference only. This result is for self-reflection and the app is not responsible for decisions, outcomes, or interpretations based on it.***";
+  const structure = isChinese
+    ? `# 人格画像
+## 核心总结
+## 主要驱动力
+## 主要敏感点
+## 思维风格
+## 情绪模式
+## 关系模式
+## 压力模式
+## 冲突与权威模式
+## 优势
+## 盲点
+## 核心内在冲突
+## 成长方向
+## 使用的证据
+## 不确定性`
+    : `# Personality Portrait
 ## Core Summary
 ## Main Drivers
 ## Main Sensitivities
@@ -222,13 +254,21 @@ export const generateFinalReport = async (
 ## Core Inner Conflict
 ## Growth Direction
 ## Evidence Used
-## Uncertainty
+## Uncertainty`;
+  const prompt = `Create the final report as Markdown using this exact structure:
+${disclaimer}
+
+${structure}
+
+Language rule: ${isChinese ? "Write the entire report in Simplified Chinese, including headings, bullets, evidence explanations, and uncertainty language." : "Write the entire report in English."}
+Reference disclaimer line:
+${disclaimer}
 
 Rules:
 - Do not diagnose.
 - Do not assign a fixed type.
 - Keep the reference-only disclaimer as the first visible line, surrounded by ***.
-- Use phrases like "appears to", "may", "one possible pattern".
+- Use cautious language.
 - Link claims to evidence.
 - Include uncertainty and missing information.
 - Keep the report useful and concise.
@@ -247,13 +287,19 @@ export const generateMbtiAssessment = async (
   args: {
     answers: unknown[];
     analyses: unknown[];
+    language?: OutputLanguage;
   }
 ): Promise<MbtiAssessment> => {
+  const languageRule =
+    args.language === "zh"
+      ? "Write summary and rationale strings in Simplified Chinese."
+      : "Write summary and rationale strings in English.";
   const prompt = `Estimate an MBTI-style preference profile from this interview evidence.
 
 Important:
 - MBTI here is only a lightweight self-reflection lens, not a diagnosis or fixed identity.
 - Use evidence-linked, cautious language.
+- ${languageRule}
 - Give a percentage from 0 to 100 for the left-side letter in each pair:
   EI uses E on the left and I on the right.
   SN uses S on the left and N on the right.

@@ -31,6 +31,7 @@ const SESSION_KEY = "portrait-app-session";
 const LANGUAGE_KEY = "portrait-app-language";
 const REPORT_DISCLAIMER =
   "***Reference only. This result is for self-reflection and the app is not responsible for decisions, outcomes, or interpretations based on it.***";
+const REPORT_DISCLAIMER_ZH = "***仅供参考。本结果只用于自我反思，应用不对基于本结果作出的决定、后果或解释负责。***";
 const RADAR_SIZE = 250;
 
 type AppLanguage = "en" | "zh";
@@ -71,6 +72,18 @@ const COPY = {
     openQuestion: "Open question",
     scoringQuestion: "Scoring question",
     calibration: "Calibration",
+    yes: "YES",
+    no: "NO",
+    section: "Section",
+    of: "of",
+    reportDisclaimer: REPORT_DISCLAIMER,
+    lowConfidence: "low",
+    mediumConfidence: "medium",
+    highConfidence: "high",
+    confidence: "Confidence",
+    leans: "Leans",
+    mbtiMissing: "MBTI assessment has not been generated yet.",
+    polygonMissing: "Generate or regenerate the summary first to create polygon charts.",
     rephrase: "RE-PHRASE",
     rephrasing: "RE-PHRASING...",
     voiceInput: "VOICE INPUT",
@@ -92,6 +105,15 @@ const COPY = {
     correctionNeededBody: "Please add what the app misunderstood before moving on.",
     permissionTitle: "Permission needed",
     permissionBody: "Microphone and speech-recognition permission are needed for voice input.",
+    apiKeyRequiredTitle: "API key required",
+    apiKeyRequiredBody: "needs an API key before the interview can use AI summaries.",
+    modelAnalysisFallback: "Model analysis failed, so the app used local fallback predictions.",
+    reportFallback: "Model report failed, so the app generated a local draft.",
+    mbtiFallback: "MBTI assessment used a local fallback.",
+    rephraseFallback: "Question re-phrase used a local fallback.",
+    copyFailed: "Copy failed.",
+    voiceFailed: "Could not start voice input.",
+    detail: "Detail",
     appTitle: "MagicMirror"
   },
   zh: {
@@ -122,13 +144,25 @@ const COPY = {
     apiSetup: "API 设置",
     reset: "重置",
     summarizeTitle: "总结并预测",
-    summarizeBody: "应用会总结本节，预测 YES/NO 校准答案，然后检查预测与你的回答是否达到 80% 或以上一致。",
+    summarizeBody: "应用会总结本节，预测是/否校准答案，然后检查预测与你的回答是否达到 80% 或以上一致。",
     trainSection: "训练本节",
     currentSummary: "当前章节总结",
     predictionAgreement: "预测一致率",
     openQuestion: "开放题",
     scoringQuestion: "评分题",
     calibration: "校准",
+    yes: "是",
+    no: "否",
+    section: "第",
+    of: "节，共",
+    reportDisclaimer: REPORT_DISCLAIMER_ZH,
+    lowConfidence: "低",
+    mediumConfidence: "中",
+    highConfidence: "高",
+    confidence: "置信度",
+    leans: "倾向",
+    mbtiMissing: "尚未生成 MBTI 评估。",
+    polygonMissing: "请先生成或重新生成总结，以创建多边形图。",
     rephrase: "换个问法",
     rephrasing: "改写中...",
     voiceInput: "语音输入",
@@ -150,6 +184,15 @@ const COPY = {
     correctionNeededBody: "请补充应用误解了什么，再继续下一节。",
     permissionTitle: "需要权限",
     permissionBody: "语音输入需要麦克风和语音识别权限。",
+    apiKeyRequiredTitle: "需要 API key",
+    apiKeyRequiredBody: "需要 API key，访谈才能使用 AI 总结。",
+    modelAnalysisFallback: "模型分析失败，应用已使用本地 fallback 预测。",
+    reportFallback: "模型报告失败，应用已生成本地草稿。",
+    mbtiFallback: "MBTI 评估已使用本地 fallback。",
+    rephraseFallback: "问题改写已使用本地 fallback。",
+    copyFailed: "复制失败。",
+    voiceFailed: "无法启动语音输入。",
+    detail: "详情",
     appTitle: "MagicMirror"
   }
 };
@@ -232,6 +275,254 @@ const ORIGINAL_BY_REVERSED_YES_NO = Object.fromEntries(
   Object.entries(REVERSED_YES_NO_QUESTIONS).map(([original, reversed]) => [reversed, original])
 ) as Record<string, string>;
 
+const ZH_DISPLAY_TEXT: Record<string, string> = {
+  "Life Narrative": "人生叙事",
+  "Understand how the person tells the story of their life.": "理解这个人如何讲述自己的人生故事。",
+  "If you had to divide your life so far into three chapters, what would those chapters be?": "如果把你到目前为止的人生分成三个章节，它们分别会是什么？",
+  "What has been the most important turning point in your life?": "你人生中最重要的转折点是什么？",
+  "What theme has repeated itself throughout your life?": "在你的人生里，反复出现的主题是什么？",
+  "What do you feel you have been fighting against or trying to overcome?": "你觉得自己一直在对抗或试图克服什么？",
+  "What part of you do you most wish other people could truly understand?": "你最希望别人真正理解你的哪一部分？",
+  "Can you describe a specific moment that shows this?": "你能描述一个能体现这一点的具体时刻吗？",
+  "What changed after that event?": "那件事之后发生了什么变化？",
+  "What was the strongest emotion at the time?": "当时最强烈的情绪是什么？",
+  "Looking back, do you think your interpretation was accurate?": "回头看，你觉得当时自己的理解准确吗？",
+  "Do you often feel different from people around you?": "你是否经常觉得自己和周围的人不一样？",
+  "Do you often feel you matured earlier than others?": "你是否经常觉得自己比别人更早成熟？",
+  "Do you often feel you need to prove something?": "你是否经常觉得自己需要证明什么？",
+  "From 1 to 10, how much of your life feels self-directed?": "从 1 到 10，你觉得自己的人生有多大程度是由自己主导的？",
+  "From 1 to 10, how important is it for you to be deeply understood?": "从 1 到 10，被深度理解对你有多重要？",
+  "Do you usually feel you developed at about the same pace as people around you?": "你通常觉得自己的成长节奏和周围人差不多吗？",
+
+  "Core Motivation": "核心动机",
+  "Identify what drives the person and what they most want to avoid.": "识别驱动这个人的因素，以及他们最想避免什么。",
+  "When you work hard for something important, what are you usually trying to gain?": "当你为重要的事情努力时，你通常想获得什么？",
+  "What are you usually trying to avoid?": "你通常想避免什么？",
+  "What kind of success would feel truly meaningful to you?": "什么样的成功会让你觉得真正有意义？",
+  "What kind of compliment matters most to you?": "哪种赞美对你最重要？",
+  "What kind of criticism hurts most?": "哪种批评最容易伤到你？",
+  "Can you give a recent example?": "你能举一个最近的例子吗？",
+  "If nobody recognized the outcome, would you still want it?": "如果没有人认可结果，你还会想要它吗？",
+  "What do you fear losing?": "你害怕失去什么？",
+  "Does this motivation energize you or exhaust you?": "这种动机让你更有能量，还是让你感到消耗？",
+  "Do you often fear wasting your potential?": "你是否经常害怕浪费自己的潜力？",
+  "Do you find it difficult to accept being ordinary?": "你是否觉得接受平凡很困难？",
+  "Do you often compare yourself with high-achieving people?": "你是否经常把自己和高成就者比较？",
+  "Are you more motivated by challenge than comfort?": "相比舒适，你是否更容易被挑战激励？",
+  "From 1 to 10, how strong is your need for achievement?": "从 1 到 10，你的成就需求有多强？",
+  "From 1 to 10, how strong is your need for freedom?": "从 1 到 10，你的自由需求有多强？",
+  "From 1 to 10, how strong is your need for recognition?": "从 1 到 10，你的被认可需求有多强？",
+  "Is being ordinary something you can usually accept without much inner conflict?": "你通常能接受平凡而不产生太多内心冲突吗？",
+  "Does comfort usually motivate you more than challenge?": "舒适通常比挑战更能激励你吗？",
+
+  "Values": "价值观",
+  "Understand what the person prioritizes when choices involve trade-offs.": "理解当选择涉及取舍时，这个人优先考虑什么。",
+  "If you had to rank freedom, security, achievement, intimacy, and meaning, how would you rank them?": "如果要给自由、安全、成就、亲密和意义排序，你会怎么排？",
+  "What kind of behavior do you most disrespect?": "你最不尊重哪类行为？",
+  "What kind of person do you deeply respect?": "你深度尊重哪类人？",
+  "When making a major decision, what usually makes the final decision clear?": "做重大决定时，通常是什么让最终选择变得清晰？",
+  "What would you still do even if there were no external reward?": "即使没有外部奖励，你仍然会做什么？",
+  "What is a recent decision that reflected this value?": "最近有什么决定体现了这个价值观？",
+  "Did this value cost you anything?": "这个价值观让你付出过什么代价吗？",
+  "Would you still choose it if it cost money, status, or a relationship?": "如果它会让你付出金钱、地位或关系代价，你还会选择它吗？",
+  "Has this value changed over time?": "这个价值观随时间改变过吗？",
+  "Are you willing to tolerate short-term discomfort for long-term goals?": "你是否愿意为了长期目标忍受短期不适？",
+  "Is it hard for you to act against your principles?": "违背原则行事对你来说困难吗？",
+  "Are you especially sensitive to inefficiency, hypocrisy, or low standards?": "你是否特别敏感于低效、虚伪或低标准？",
+  "From 1 to 10, how much do you value security?": "从 1 到 10，你有多重视安全感？",
+  "From 1 to 10, how much do you value influence?": "从 1 到 10，你有多重视影响力？",
+  "From 1 to 10, how much do you value inner freedom?": "从 1 到 10，你有多重视内在自由？",
+  "Is it usually easy for you to compromise your principles when the situation asks for it?": "当情境要求时，你通常容易妥协自己的原则吗？",
+
+  "Cognitive Style": "认知风格",
+  "Understand how the person thinks, learns, judges, and solves problems.": "理解这个人如何思考、学习、判断和解决问题。",
+  "When you face a complex problem, what do you usually do first?": "面对复杂问题时，你通常第一步会做什么？",
+  "Do you trust data, intuition, experience, or feedback most?": "你最信任数据、直觉、经验还是反馈？",
+  "What kind of problem are you naturally good at solving?": "你天然擅长解决哪类问题？",
+  "What kind of problem drains you?": "哪类问题会让你感到耗能？",
+  "When do you feel that other people are thinking too shallowly?": "什么时候你会觉得别人想得太浅？",
+  "Can you describe a recent problem you solved?": "你能描述一个最近解决的问题吗？",
+  "What was your first hypothesis?": "你的第一个假设是什么？",
+  "Did you revise your initial judgment?": "你后来修正过最初的判断吗？",
+  "How did you know your solution was working?": "你如何知道自己的方案正在起作用？",
+  "Do you often build mental models or systems?": "你是否经常建立心智模型或系统？",
+  "Do you quickly notice hidden patterns?": "你是否很快注意到隐藏模式？",
+  "Do you dislike repetitive, low-creativity tasks?": "你是否不喜欢重复、低创造性的任务？",
+  "Do you become impatient with unclear logic?": "面对不清晰的逻辑，你是否会不耐烦？",
+  "From 1 to 10, how much do you rely on intuition?": "从 1 到 10，你有多依赖直觉？",
+  "From 1 to 10, how much do you rely on evidence?": "从 1 到 10，你有多依赖证据？",
+  "Do hidden patterns usually take you a while to notice?": "隐藏模式通常需要你花一段时间才会注意到吗？",
+  "Can you usually stay patient when the logic is unclear?": "当逻辑不清楚时，你通常能保持耐心吗？",
+
+  "Emotional Pattern": "情绪模式",
+  "Understand what triggers the person emotionally and how they regulate emotion.": "理解什么会触发这个人的情绪，以及他们如何调节情绪。",
+  "When was the last time your emotions changed noticeably?": "最近一次你的情绪明显变化是什么时候？",
+  "What most easily irritates you?": "什么最容易让你烦躁？",
+  "What most easily hurts you?": "什么最容易伤到你？",
+  "When you are angry, do you express it, suppress it, or redirect it?": "生气时，你会表达、压抑，还是转移它？",
+  "How do you usually recover from a low point?": "你通常如何从低谷中恢复？",
+  "What happened right before the emotion appeared?": "情绪出现前发生了什么？",
+  "What did you feel in your body?": "你身体上有什么感受？",
+  "Did you express it immediately?": "你当时立刻表达了吗？",
+  "Does this emotional pattern repeat?": "这种情绪模式会重复出现吗？",
+  "Can one sentence from someone affect your mood strongly?": "别人的一句话是否会强烈影响你的心情？",
+  "Do you often look calm outside but feel intense inside?": "你是否经常外表平静，但内心强烈？",
+  "Do you dislike showing vulnerability?": "你是否不喜欢展示脆弱？",
+  "Do you recover quickly after anger?": "生气之后你是否恢复得很快？",
+  "From 1 to 10, how intense are your emotional reactions?": "从 1 到 10，你的情绪反应有多强烈？",
+  "From 1 to 10, how difficult is it for you to express emotion?": "从 1 到 10，表达情绪对你有多困难？",
+  "Do your outward emotions usually match what you feel inside?": "你的外在情绪通常和内心感受一致吗？",
+  "Does anger usually stay with you for a long time?": "愤怒通常会在你心里停留很久吗？",
+
+  "Stress Response": "压力反应",
+  "Understand how the person behaves when resources, time, certainty, or control are limited.": "理解当资源、时间、确定性或控制感有限时，这个人如何行动。",
+  "What was the most stressful period of your life?": "你人生中压力最大的阶段是什么？",
+  "When pressure arrives, what is your first reaction?": "压力来临时，你的第一反应是什么？",
+  "Under pressure, do you become more efficient or more disorganized?": "在压力下，你会更高效还是更混乱？",
+  "What do you do when plans fall apart?": "计划崩掉时，你会怎么做？",
+  "Under what conditions do you avoid or procrastinate?": "在什么情况下你会逃避或拖延？",
+  "Did you become more controlling, impatient, detached, or dependent?": "你会变得更控制、更不耐烦、更抽离，还是更依赖？",
+  "Did others notice a change?": "别人注意到你的变化了吗？",
+  "What support did you most need?": "你当时最需要什么支持？",
+  "What eventually helped you recover?": "最终是什么帮助你恢复？",
+  "Under stress, do you try to control details more?": "压力下，你是否会更想控制细节？",
+  "Under stress, do you carry things alone rather than ask for help?": "压力下，你是否更倾向于独自扛着，而不是求助？",
+  "Under stress, do you become more aggressive?": "压力下，你是否会更有攻击性？",
+  "Under stress, do you avoid tasks or people?": "压力下，你是否会回避任务或人？",
+  "From 1 to 10, how resilient are you under pressure?": "从 1 到 10，你在压力下有多有韧性？",
+  "From 1 to 10, how easily do you lose patience under pressure?": "从 1 到 10，你在压力下有多容易失去耐心？",
+  "Under stress, do you usually ask for help instead of carrying things alone?": "压力下，你通常会求助，而不是独自扛着吗？",
+  "Under stress, do you usually stay engaged with tasks and people?": "压力下，你通常仍会投入任务和人际互动吗？",
+
+  "Relationship Pattern": "关系模式",
+  "Understand how the person forms trust, intimacy, boundaries, and connection.": "理解这个人如何建立信任、亲密、边界和连接。",
+  "How do you decide whether someone is trustworthy?": "你如何判断一个人是否值得信任？",
+  "What do you most need in relationships?": "你在关系中最需要什么？",
+  "What are you most afraid someone might do to you emotionally?": "你最害怕别人对你造成什么情感上的影响？",
+  "What kind of person do you easily become close to?": "你容易和哪类人亲近？",
+  "Is there a relationship pattern that has repeated in your life?": "你的人生中是否有反复出现的关系模式？",
+  "When was the last time a relationship became distant?": "最近一次关系变疏远是什么时候？",
+  "What caused the distance?": "是什么导致了疏远？",
+  "Did you try to repair it?": "你尝试修复过吗？",
+  "Is it easy for you to express needs?": "表达需求对你来说容易吗？",
+  "Is it hard for you to fully trust people?": "完全信任别人对你来说困难吗？",
+  "Do you dislike owing others favors?": "你是否不喜欢欠别人人情？",
+  "Is it easier for you to help others than ask for help?": "帮助别人是否比向别人求助更容易？",
+  "Do you need a lot of personal space in close relationships?": "在亲密关系中，你是否需要大量个人空间？",
+  "From 1 to 10, how strong is your need for closeness?": "从 1 到 10，你对亲近的需求有多强？",
+  "From 1 to 10, how strong is your need for boundaries?": "从 1 到 10，你对边界的需求有多强？",
+  "Are you generally comfortable owing others favors?": "你通常能坦然接受欠别人人情吗？",
+  "In close relationships, are you usually comfortable with very little personal space?": "在亲密关系中，个人空间很少时你通常也舒服吗？",
+
+  "Conflict, Authority, and Power": "冲突、权威与权力",
+  "Understand how the person handles confrontation, hierarchy, competition, and control.": "理解这个人如何处理对抗、层级、竞争和控制。",
+  "When someone is clearly better than you, what do you usually feel?": "当别人明显比你强时，你通常会有什么感受？",
+  "When someone less competent tries to direct you, how do you react?": "当能力不如你的人试图指挥你时，你会怎么反应？",
+  "How do you relate to authority?": "你如何看待和应对权威？",
+  "When was the last time you had a conflict with someone?": "你最近一次和别人发生冲突是什么时候？",
+  "In what areas do you have control needs?": "在哪些方面你有控制需求？",
+  "Did you care more about truth, fairness, efficiency, status, or harmony?": "你当时更在意真相、公平、效率、地位还是和谐？",
+  "Did you reflect on your own role afterward?": "事后你反思过自己在其中的角色吗？",
+  "Did you suppress your real opinion?": "你压抑了真实意见吗？",
+  "What would have made the conflict easier?": "什么会让那次冲突更容易处理？",
+  "Do you dislike being managed by people you do not respect?": "你是否不喜欢被你不尊重的人管理？",
+  "Is it hard for you to follow authority you consider low-quality?": "服从你认为低质量的权威对你来说困难吗？",
+  "Does competition energize you?": "竞争会让你更有能量吗？",
+  "Do you mentally rank people by competence?": "你是否会在心里按能力给人排序？",
+  "From 1 to 10, how competitive are you?": "从 1 到 10，你有多好胜？",
+  "From 1 to 10, how naturally obedient are you to authority?": "从 1 到 10，你对权威有多自然顺从？",
+  "Can you usually follow authority even when you consider it low-quality?": "即使你认为权威质量不高，你通常也能服从吗？",
+  "Do you usually avoid mentally comparing people by competence?": "你通常会避免在心里按能力比较别人吗？",
+
+  "Self-Esteem and Vulnerability": "自尊与脆弱点",
+  "Understand how the person protects self-worth and where they are most emotionally exposed.": "理解这个人如何保护自我价值，以及哪里最容易情感暴露。",
+  "What most easily makes you feel not good enough?": "什么最容易让你觉得自己不够好？",
+  "What part of yourself do you least want others to see?": "你最不想让别人看到自己的哪一部分？",
+  "When do you feel underestimated?": "什么时候你会觉得自己被低估？",
+  "What kind of judgment is hardest for you to accept?": "哪种评价最让你难以接受？",
+  "Where does your confidence come from?": "你的自信来自哪里？",
+  "When did this sensitivity begin?": "这种敏感是从什么时候开始的？",
+  "Do you hide it or express it?": "你会隐藏它还是表达它？",
+  "What happens when someone touches this vulnerable point?": "当别人触碰到这个脆弱点时，会发生什么？",
+  "Does this vulnerability also motivate you?": "这个脆弱点也会激励你吗？",
+  "Are you afraid of being ordinary?": "你害怕平凡吗？",
+  "Are you afraid of being seen as incompetent?": "你害怕被别人看作无能吗？",
+  "Are you afraid of being ignored?": "你害怕被忽视吗？",
+  "Do you use achievement to prove your worth?": "你会用成就来证明自己的价值吗？",
+  "From 1 to 10, how sensitive are you to criticism?": "从 1 到 10，你对批评有多敏感？",
+  "From 1 to 10, how important is it to maintain a strong image?": "从 1 到 10，维持强大形象对你有多重要？",
+  "Are you generally comfortable with others seeing your incompetence or inexperience?": "让别人看到你的不擅长或缺乏经验，你通常能接受吗？",
+  "Is your sense of worth usually separate from achievement?": "你的价值感通常能和成就分开吗？",
+
+  "Growth Direction and Blind Spots": "成长方向与盲点",
+  "Understand maturity, self-awareness, recurring limitations, and development potential.": "理解成熟度、自我觉察、反复出现的限制和发展潜力。",
+  "What is your greatest personality strength?": "你最大的性格优势是什么？",
+  "What is the cost of that strength?": "这个优势的代价是什么？",
+  "What do people close to you often remind you about?": "亲近的人经常提醒你什么？",
+  "What pattern do you want to change but find difficult to change?": "你想改变但很难改变的模式是什么？",
+  "If you became more mature in the next five years, what would change?": "如果未来五年你变得更成熟，会发生什么变化？",
+  "Have you tried to change this before?": "你以前尝试改变过它吗？",
+  "When is this problem most visible?": "这个问题在什么时候最明显？",
+  "What does this pattern protect you from?": "这个模式在保护你免受什么？",
+  "What would improvement look like in observable behavior?": "如果有进步，在可观察行为上会是什么样？",
+  "Do you reflect on yourself often?": "你是否经常反思自己？",
+  "Are you willing to admit blind spots?": "你是否愿意承认盲点？",
+  "Is it hard for you to accept ordinary advice?": "接受普通建议对你来说困难吗？",
+  "Do you prefer discovering things yourself rather than being told?": "相比别人直接告诉你，你是否更喜欢自己发现？",
+  "From 1 to 10, how strong is your self-awareness?": "从 1 到 10，你的自我觉察有多强？",
+  "From 1 to 10, how willing are you to change long-term patterns?": "从 1 到 10，你有多愿意改变长期模式？",
+  "Is it usually hard for you to admit blind spots?": "承认盲点对你来说通常困难吗？",
+  "Do you usually prefer being told directly rather than discovering things yourself?": "相比自己发现，你通常更喜欢别人直接告诉你吗？",
+
+  "The app's predictions did not reach 80% agreement. What did it misunderstand? Add a correction, exception, or counterexample.": "应用预测没有达到 80% 一致率。它误解了什么？请补充一个修正、例外或反例。",
+  "redemption narrative": "救赎叙事",
+  "outsider narrative": "局外人叙事",
+  "survival narrative": "生存叙事",
+  "unresolved identity conflict": "未解决的身份冲突",
+  "achievement motivation": "成就动机",
+  "autonomy motivation": "自主动机",
+  "recognition motivation": "认可动机",
+  "fear of failure": "失败恐惧",
+  "fear of dependence": "依赖恐惧",
+  "freedom vs stability": "自由与稳定的取舍",
+  "achievement vs peace": "成就与平静的取舍",
+  "loyalty vs truth": "忠诚与真实的取舍",
+  "efficiency vs empathy": "效率与共情的取舍",
+  "analytical style": "分析型风格",
+  "systems thinking": "系统思维",
+  "divergent thinking": "发散思维",
+  "tolerance for ambiguity": "对模糊性的容忍",
+  "emotional suppression": "情绪压抑",
+  "shame sensitivity": "羞耻敏感",
+  "anger style": "愤怒风格",
+  "need for solitude": "独处需求",
+  "hidden vulnerability": "隐藏的脆弱",
+  "fight response": "战斗反应",
+  "withdrawal response": "退缩反应",
+  "overwork response": "过度工作反应",
+  "problem-solving response": "问题解决反应",
+  "hidden cost of high performance": "高表现的隐性代价",
+  "trust threshold": "信任阈值",
+  "caretaker role": "照顾者角色",
+  "distance-protection pattern": "距离保护模式",
+  "relationship repair ability": "关系修复能力",
+  "resistance to authority": "对权威的抵抗",
+  "status sensitivity": "地位敏感",
+  "competence sensitivity": "能力敏感",
+  "conflict avoidance": "冲突回避",
+  "need for control": "控制需求",
+  "achievement-based self-worth": "基于成就的自我价值",
+  "shame trigger": "羞耻触发点",
+  "fear of exposure": "暴露恐惧",
+  "fear of mediocrity": "平庸恐惧",
+  "emotional armor": "情绪盔甲",
+  "self-awareness": "自我觉察",
+  "defensiveness": "防御性",
+  "capacity for change": "改变能力",
+  "rigidity": "僵化",
+  "growth edge": "成长边界"
+};
+
 const yesNoQuestionsFor = (moduleIndex: number) =>
   GUIDE_MODULES[moduleIndex]?.calibrationQuestions
     .filter((question) => !isRatingQuestion(question))
@@ -290,7 +581,7 @@ const predictionForAnsweredQuestion = (predictions: ModuleAnalysis["predictedAns
   return original ? { ...original, question, predictedAnswer: !original.predictedAnswer } : undefined;
 };
 
-const localModuleAnalysis = (moduleIndex: number, moduleAnswers: Answer[]) => {
+const localModuleAnalysis = (moduleIndex: number, moduleAnswers: Answer[], language: AppLanguage) => {
   const module = GUIDE_MODULES[moduleIndex];
   const yesNoQuestions = yesNoQuestionsFor(moduleIndex);
   const textAnswers = moduleAnswers
@@ -303,28 +594,86 @@ const localModuleAnalysis = (moduleIndex: number, moduleAnswers: Answer[]) => {
     moduleId: module?.id ?? "",
     title: module?.title ?? "Module",
     summary:
-      textAnswers.length > 0
-        ? `This section has ${textAnswers.length} narrative answer(s). The app needs model access for a richer interpretation, so this local summary treats patterns as tentative.`
-        : "This section has limited evidence, so interpretations should remain low confidence.",
+      language === "zh"
+        ? textAnswers.length > 0
+          ? `本节有 ${textAnswers.length} 条叙述性回答。由于模型访问不可用，本地总结只能作为暂定理解。`
+          : "本节证据有限，因此解释应保持低置信度。"
+        : textAnswers.length > 0
+          ? `This section has ${textAnswers.length} narrative answer(s). The app needs model access for a richer interpretation, so this local summary treats patterns as tentative.`
+          : "This section has limited evidence, so interpretations should remain low confidence.",
     observations: textAnswers.slice(0, 3),
-    patterns: module?.detect.slice(0, 3).map((pattern) => `Possible ${pattern}`) ?? [],
+    patterns:
+      module?.detect.slice(0, 3).map((pattern) =>
+        language === "zh" ? `可能存在：${displayForLanguage(pattern, language)}` : `Possible ${pattern}`
+      ) ?? [],
     confidence: textAnswers.length >= 3 ? "medium" : "low",
     predictedAnswers: yesNoQuestions.map((question) => ({
       question,
       predictedAnswer: ORIGINAL_BY_REVERSED_YES_NO[question] ? avgRating < 6 : avgRating >= 6,
-      rationale: "Local fallback based mainly on scoring intensity."
+      rationale: language === "zh" ? "本地 fallback 主要基于评分强度。" : "Local fallback based mainly on scoring intensity."
     }))
   };
   return analysis;
 };
 
-const localFinalReport = (session: SessionState) => {
+const reportDisclaimerFor = (language: AppLanguage) => (language === "zh" ? REPORT_DISCLAIMER_ZH : REPORT_DISCLAIMER);
+
+const localFinalReport = (session: SessionState, language: AppLanguage) => {
   const supported = session.analyses.flatMap((analysis) => analysis.patterns).slice(0, 8);
   const evidence = session.answers
     .filter((answer) => answer.kind === "open")
-    .map((answer) => `- ${answer.question}: ${String(answer.value).slice(0, 180)}`)
+    .map((answer) => `- ${displayForLanguage(answer.question, language)}: ${String(answer.value).slice(0, 180)}`)
     .slice(0, 8)
     .join("\n");
+
+  if (language === "zh") {
+    return `${REPORT_DISCLAIMER_ZH}
+
+# 人格画像
+
+## 核心总结
+这是本地草稿，因为模型报告生成不可用。最可靠的材料来自用户给出的具体例子，以及跨模块反复出现的模式。
+
+## 主要驱动力
+${supported.slice(0, 3).map((item) => `- ${displayForLanguage(item, language)}`).join("\n") || "- 证据不足"}
+
+## 主要敏感点
+${supported.slice(3, 6).map((item) => `- ${displayForLanguage(item, language)}`).join("\n") || "- 证据不足"}
+
+## 思维风格
+请结合“认知风格”模块，进行基于证据的谨慎理解。
+
+## 情绪模式
+请结合“情绪模式”模块，观察触发因素、表达方式和恢复方式。
+
+## 关系模式
+请结合“关系模式”模块，观察信任、亲密和边界。
+
+## 压力模式
+请结合“压力反应”模块，观察压力下的行为模式。
+
+## 冲突与权威模式
+请结合“冲突、权威与权力”模块，观察层级、尊重和控制相关模式。
+
+## 优势
+- 所有模式都应谨慎解释，并尽量连接到具体例子。
+
+## 盲点
+- 任何盲点都只是暂定判断，需要用户确认或修正。
+
+## 核心内在冲突
+需要模型综合或更多反思材料。
+
+## 成长方向
+可结合最后一个模块的回答，选择具体、可观察的下一步。
+
+## 使用的证据
+${evidence || "- 暂无开放题证据。"}
+
+## 不确定性
+本报告避免诊断和固定标签。更多反例和修正会提升准确性。
+`;
+  }
 
   return `${REPORT_DISCLAIMER}
 
@@ -374,9 +723,10 @@ This report avoids diagnosis and fixed labels. More counterexamples and correcti
 `;
 };
 
-const ensureReportDisclaimer = (report: string) => {
+const ensureReportDisclaimer = (report: string, language: AppLanguage) => {
   const trimmed = report.trim();
-  return trimmed.startsWith(REPORT_DISCLAIMER) ? trimmed : `${REPORT_DISCLAIMER}\n\n${trimmed}`;
+  const disclaimer = reportDisclaimerFor(language);
+  return trimmed.startsWith(disclaimer) ? trimmed : `${disclaimer}\n\n${trimmed}`;
 };
 
 const mbtiDimensionDefaults: MbtiDimension[] = [
@@ -407,7 +757,7 @@ const normalizeMbtiAssessment = (assessment: MbtiAssessment): MbtiAssessment => 
   };
 };
 
-const localMbtiAssessment = (session: SessionState): MbtiAssessment => {
+const localMbtiAssessment = (session: SessionState, language: AppLanguage): MbtiAssessment => {
   const combined = [
     ...session.answers.map((answer) => `${answer.question} ${String(answer.value)}`),
     ...session.analyses.flatMap((analysis) => [analysis.summary, ...analysis.patterns, ...analysis.observations])
@@ -430,7 +780,11 @@ const localMbtiAssessment = (session: SessionState): MbtiAssessment => {
       rightLetter: "I",
       leftScore: score(["people", "relationship", "express", "close", "feedback"], ["alone", "solitude", "private", "space", "inside"]),
       chosenLetter: "E",
-      rationale: ["Local fallback estimated this from social-energy and privacy language in the answers."]
+      rationale: [
+        language === "zh"
+          ? "本地 fallback 根据回答中的社交能量、关系和私人空间相关语言进行估计。"
+          : "Local fallback estimated this from social-energy and privacy language in the answers."
+      ]
     },
     {
       key: "SN",
@@ -438,7 +792,11 @@ const localMbtiAssessment = (session: SessionState): MbtiAssessment => {
       rightLetter: "N",
       leftScore: score(["specific", "concrete", "recent", "detail", "practical"], ["pattern", "meaning", "theme", "future", "abstract"]),
       chosenLetter: "S",
-      rationale: ["Local fallback estimated this from concrete-detail language versus pattern and meaning language."]
+      rationale: [
+        language === "zh"
+          ? "本地 fallback 根据具体细节语言与模式、意义语言的比例进行估计。"
+          : "Local fallback estimated this from concrete-detail language versus pattern and meaning language."
+      ]
     },
     {
       key: "TF",
@@ -446,7 +804,11 @@ const localMbtiAssessment = (session: SessionState): MbtiAssessment => {
       rightLetter: "F",
       leftScore: score(["logic", "efficient", "competence", "truth", "standards"], ["emotion", "hurt", "relationship", "empathy", "harmony"]),
       chosenLetter: "T",
-      rationale: ["Local fallback estimated this from logic, standards, emotion, and relationship cues."]
+      rationale: [
+        language === "zh"
+          ? "本地 fallback 根据逻辑、标准、情绪和关系线索进行估计。"
+          : "Local fallback estimated this from logic, standards, emotion, and relationship cues."
+      ]
     },
     {
       key: "JP",
@@ -454,7 +816,11 @@ const localMbtiAssessment = (session: SessionState): MbtiAssessment => {
       rightLetter: "P",
       leftScore: score(["control", "plan", "decision", "goal", "discipline"], ["freedom", "flexible", "discover", "open", "change"]),
       chosenLetter: "J",
-      rationale: ["Local fallback estimated this from planning and control language versus flexibility and openness language."]
+      rationale: [
+        language === "zh"
+          ? "本地 fallback 根据计划与控制语言，以及灵活性和开放性语言进行估计。"
+          : "Local fallback estimated this from planning and control language versus flexibility and openness language."
+      ]
     }
   ];
   const dimensions: MbtiDimension[] = baseDimensions.map((dimension): MbtiDimension => ({
@@ -465,19 +831,22 @@ const localMbtiAssessment = (session: SessionState): MbtiAssessment => {
   return {
     type: dimensions.map((dimension) => dimension.chosenLetter).join(""),
     confidence: "low",
-    summary: "This is a local fallback MBTI-style estimate. Treat it as a rough self-reflection lens, not a stable type.",
+    summary:
+      language === "zh"
+        ? "这是本地 fallback 的 MBTI 风格估计。请把它当作粗略的自我反思视角，而不是稳定类型。"
+        : "This is a local fallback MBTI-style estimate. Treat it as a rough self-reflection lens, not a stable type.",
     dimensions
   };
 };
 
-const mbtiMarkdown = (assessment: MbtiAssessment | null) => {
+const mbtiMarkdown = (assessment: MbtiAssessment | null, language: AppLanguage) => {
   if (!assessment) {
     return "";
   }
   const lines = [
-    "## MBTI-style Assessment",
-    `Result: ${assessment.type}`,
-    `Confidence: ${assessment.confidence}`,
+    language === "zh" ? "## MBTI 风格评估" : "## MBTI-style Assessment",
+    `${language === "zh" ? "结果" : "Result"}: ${assessment.type}`,
+    `${language === "zh" ? "置信度" : "Confidence"}: ${assessment.confidence}`,
     assessment.summary,
     "",
     ...assessment.dimensions.flatMap((dimension) => [
@@ -497,6 +866,9 @@ const cleanMarkdownLabel = (text: string) =>
     .replace(/[`#>*_]/g, "")
     .replace(/\s+/g, " ")
     .trim();
+
+const displayForLanguage = (value: string, language: AppLanguage) =>
+  language === "zh" ? ZH_DISPLAY_TEXT[value] ?? value : value;
 
 const scoreForText = (text: string) => {
   const normalized = text.toLowerCase();
@@ -575,7 +947,17 @@ const parsePolygonSections = (report: string): PolygonSection[] => {
     });
 };
 
-const localRephraseQuestion = (question: string, kind: QuestionKind) => {
+const localRephraseQuestion = (question: string, kind: QuestionKind, language: AppLanguage) => {
+  if (language === "zh") {
+    const translated = displayForLanguage(question, language);
+    if (kind === "rating") {
+      return `仍然使用 1 到 10 的评分，其中 1 代表非常低、10 代表非常高：${translated.replace(/^从 1 到 10，?/, "")}`;
+    }
+    if (kind === "yesno") {
+      return `从你通常的真实行为来看，请回答“是”或“否”：${translated}`;
+    }
+    return `换一种说法，如果能想到具体例子也可以补充：${translated}`;
+  }
   if (kind === "rating") {
     return `On the same 1 to 10 scale, where 1 means very low and 10 means very high: ${question.replace(/^From 1 to 10,\s*/i, "")}`;
   }
@@ -669,7 +1051,10 @@ export default function App() {
 
   const saveConfig = () => {
     if (provider.needsApiKey && !config.apiKey.trim()) {
-      Alert.alert("API key required", `${provider.name} needs an API key before the interview can use AI summaries.`);
+      Alert.alert(
+        text.apiKeyRequiredTitle,
+        language === "zh" ? `${provider.name} ${text.apiKeyRequiredBody}` : `${provider.name} ${text.apiKeyRequiredBody}`
+      );
       return;
     }
     setIsConfigured(true);
@@ -677,6 +1062,8 @@ export default function App() {
 
   const toggleLanguage = () => {
     setLanguage((previous) => (previous === "en" ? "zh" : "en"));
+    setQuestionVariants({});
+    setSession((previous) => ({ ...previous, finalReport: "", mbtiAssessment: null }));
   };
 
   const changeProvider = (providerId: string) => {
@@ -747,7 +1134,8 @@ export default function App() {
         purpose: currentModule.purpose,
         answers: moduleAnswers,
         yesNoQuestions,
-        detect: currentModule.detect
+        detect: currentModule.detect,
+        language
       });
       const analysis = coerceAnalysis(currentModule.id, currentModule.title, rawAnalysis, yesNoQuestions);
       setSession((previous) => ({
@@ -757,9 +1145,9 @@ export default function App() {
         validateIndex: 0
       }));
     } catch (analysisError) {
-      const analysis = localModuleAnalysis(session.moduleIndex, moduleAnswers);
+      const analysis = localModuleAnalysis(session.moduleIndex, moduleAnswers, language);
       const detail = analysisError instanceof Error ? analysisError.message : "unknown error";
-      setError(`Model analysis failed, so the app used local fallback predictions. Detail: ${detail}`);
+      setError(`${text.modelAnalysisFallback} ${text.detail}: ${detail}`);
       setSession((previous) => ({
         ...previous,
         analyses: [...previous.analyses.filter((item) => item.moduleId !== currentModule.id), analysis],
@@ -849,21 +1237,21 @@ export default function App() {
     let finalReport = "";
     let mbtiAssessment: MbtiAssessment | null = null;
     try {
-      const report = await generateFinalReport(config, { answers: session.answers, analyses: session.analyses });
-      finalReport = ensureReportDisclaimer(report);
+      const report = await generateFinalReport(config, { answers: session.answers, analyses: session.analyses, language });
+      finalReport = ensureReportDisclaimer(report, language);
     } catch (reportError) {
       const detail = reportError instanceof Error ? reportError.message : "unknown error";
-      errors.push(`Model report failed, so the app generated a local draft. Detail: ${detail}`);
-      finalReport = localFinalReport(session);
+      errors.push(`${text.reportFallback} ${text.detail}: ${detail}`);
+      finalReport = localFinalReport(session, language);
     }
 
     try {
-      const assessment = await generateMbtiAssessment(config, { answers: session.answers, analyses: session.analyses });
+      const assessment = await generateMbtiAssessment(config, { answers: session.answers, analyses: session.analyses, language });
       mbtiAssessment = normalizeMbtiAssessment(assessment);
     } catch (mbtiError) {
       const detail = mbtiError instanceof Error ? mbtiError.message : "unknown error";
-      errors.push(`MBTI assessment used a local fallback. Detail: ${detail}`);
-      mbtiAssessment = normalizeMbtiAssessment(localMbtiAssessment(session));
+      errors.push(`${text.mbtiFallback} ${text.detail}: ${detail}`);
+      mbtiAssessment = normalizeMbtiAssessment(localMbtiAssessment(session, language));
     } finally {
       setBusy(false);
     }
@@ -879,11 +1267,11 @@ export default function App() {
     }
     setError("");
     try {
-      await Clipboard.setStringAsync(`${session.finalReport}\n\n${mbtiMarkdown(session.mbtiAssessment)}`.trim());
+      await Clipboard.setStringAsync(`${session.finalReport}\n\n${mbtiMarkdown(session.mbtiAssessment, language)}`.trim());
       Alert.alert(text.copiedTitle, text.copiedBody);
     } catch (copyError) {
       const detail = copyError instanceof Error ? copyError.message : "unknown error";
-      setError(`Copy failed. Detail: ${detail}`);
+      setError(`${text.copyFailed} ${text.detail}: ${detail}`);
     }
   };
 
@@ -917,7 +1305,7 @@ export default function App() {
       });
     } catch (voiceError) {
       setListening(false);
-      setError(voiceError instanceof Error ? voiceError.message : "Could not start voice input.");
+      setError(voiceError instanceof Error ? `${text.voiceFailed} ${text.detail}: ${voiceError.message}` : text.voiceFailed);
     }
   };
 
@@ -938,7 +1326,8 @@ export default function App() {
     setIsConfigured(false);
   };
 
-  const displayQuestionFor = (key: string, question: string) => questionVariants[key] ?? question;
+  const displayQuestionFor = (key: string, question: string) =>
+    questionVariants[key] ?? displayForLanguage(question, language);
 
   const handleRephrase = async (key: string, question: string, kind: QuestionKind) => {
     if (!question || rephrasingKey) {
@@ -948,12 +1337,12 @@ export default function App() {
     setError("");
     const currentWording = displayQuestionFor(key, question);
     try {
-      const nextWording = await rephraseQuestion(config, { question, previousWording: currentWording, kind });
-      setQuestionVariants((previous) => ({ ...previous, [key]: nextWording || localRephraseQuestion(question, kind) }));
+      const nextWording = await rephraseQuestion(config, { question, previousWording: currentWording, kind, language });
+      setQuestionVariants((previous) => ({ ...previous, [key]: nextWording || localRephraseQuestion(question, kind, language) }));
     } catch (rephraseError) {
       const detail = rephraseError instanceof Error ? rephraseError.message : "unknown error";
-      setQuestionVariants((previous) => ({ ...previous, [key]: localRephraseQuestion(question, kind) }));
-      setError(`Question re-phrase used a local fallback. Detail: ${detail}`);
+      setQuestionVariants((previous) => ({ ...previous, [key]: localRephraseQuestion(question, kind, language) }));
+      setError(`${text.rephraseFallback} ${text.detail}: ${detail}`);
     } finally {
       setRephrasingKey("");
     }
@@ -1063,7 +1452,7 @@ export default function App() {
           ) : (
             <>
               <View style={styles.disclaimerBox}>
-                <Text style={styles.disclaimerText}>{REPORT_DISCLAIMER}</Text>
+                <Text style={styles.disclaimerText}>{text.reportDisclaimer}</Text>
               </View>
               <View style={styles.tabRow}>
                 <FeedbackButton
@@ -1093,7 +1482,7 @@ export default function App() {
                   <Text style={styles.reportText}>{session.finalReport}</Text>
                 </View>
               ) : resultPage === "mbti" ? (
-                <MbtiResult assessment={session.mbtiAssessment} />
+                <MbtiResult assessment={session.mbtiAssessment} text={text} />
               ) : (
                 <PolygonResult sections={parsePolygonSections(session.finalReport)} text={text} />
               )}
@@ -1136,10 +1525,12 @@ export default function App() {
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           <Header onReset={resetInterview} onEditConfig={editApiSettings} onToggleLanguage={toggleLanguage} text={text} />
           <Text style={styles.sectionEyebrow}>
-            Section {session.moduleIndex + 1} of {GUIDE_MODULES.length}
+            {language === "zh"
+              ? `${text.section} ${session.moduleIndex + 1} ${text.of} ${GUIDE_MODULES.length}`
+              : `${text.section} ${session.moduleIndex + 1} ${text.of} ${GUIDE_MODULES.length}`}
           </Text>
-          <Text style={styles.title}>{currentModule.title}</Text>
-          <Text style={styles.bodyText}>{currentModule.purpose}</Text>
+          <Text style={styles.title}>{displayForLanguage(currentModule.title, language)}</Text>
+          <Text style={styles.bodyText}>{displayForLanguage(currentModule.purpose, language)}</Text>
 
           {session.phase === "open" ? (
             <OpenQuestion
@@ -1436,7 +1827,7 @@ function YesNoQuestion({
           onPress={() => onAnswer(true)}
           textStyle={styles.macroButtonText}
         >
-          YES
+          {text.yes}
         </FeedbackButton>
         <FeedbackButton
           style={[styles.macroButton, styles.noButton]}
@@ -1444,7 +1835,7 @@ function YesNoQuestion({
           onPress={() => onAnswer(false)}
           textStyle={styles.macroButtonText}
         >
-          NO
+          {text.no}
         </FeedbackButton>
       </View>
       <FeedbackButton style={styles.rephraseButton} onPress={onRephrase} disabled={rephraseBusy} textStyle={styles.rephraseButtonText}>
@@ -1454,18 +1845,28 @@ function YesNoQuestion({
   );
 }
 
-function MbtiResult({ assessment }: { assessment: MbtiAssessment | null }) {
+function confidenceLabel(value: MbtiAssessment["confidence"], text: CopyText) {
+  if (value === "low") {
+    return text.lowConfidence;
+  }
+  if (value === "medium") {
+    return text.mediumConfidence;
+  }
+  return text.highConfidence;
+}
+
+function MbtiResult({ assessment, text }: { assessment: MbtiAssessment | null; text: CopyText }) {
   if (!assessment) {
     return (
       <View style={styles.reportBox}>
-        <Text style={styles.reportText}>MBTI assessment has not been generated yet.</Text>
+        <Text style={styles.reportText}>{text.mbtiMissing}</Text>
       </View>
     );
   }
   return (
     <View style={styles.mbtiBox}>
       <Text style={styles.mbtiType}>{assessment.type}</Text>
-      <Text style={styles.bodyText}>Confidence: {assessment.confidence}</Text>
+      <Text style={styles.bodyText}>{text.confidence}: {confidenceLabel(assessment.confidence, text)}</Text>
       <Text style={styles.bodyText}>{assessment.summary}</Text>
       {assessment.dimensions.map((dimension) => (
         <View key={dimension.key} style={styles.dimensionBox}>
@@ -1473,7 +1874,7 @@ function MbtiResult({ assessment }: { assessment: MbtiAssessment | null }) {
             <Text style={styles.dimensionTitle}>
               {dimension.leftLetter}/{dimension.rightLetter}
             </Text>
-            <Text style={styles.dimensionChoice}>Leans {dimension.chosenLetter}</Text>
+            <Text style={styles.dimensionChoice}>{text.leans} {dimension.chosenLetter}</Text>
           </View>
           <View style={styles.barLabels}>
             <Text style={styles.barLabel}>
@@ -1594,7 +1995,7 @@ function PolygonResult({ sections, text }: { sections: PolygonSection[]; text: C
   if (!sections.length) {
     return (
       <View style={styles.reportBox}>
-        <Text style={styles.reportText}>Generate or regenerate the summary first to create polygon charts.</Text>
+        <Text style={styles.reportText}>{text.polygonMissing}</Text>
       </View>
     );
   }
