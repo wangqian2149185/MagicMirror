@@ -1,5 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import Clipboard from "expo-clipboard";
+import * as Clipboard from "expo-clipboard";
 import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from "expo-speech-recognition";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useMemo, useState } from "react";
@@ -67,8 +67,35 @@ const openQuestionsFor = (moduleIndex: number) => {
 const ratingQuestionsFor = (moduleIndex: number) =>
   GUIDE_MODULES[moduleIndex]?.calibrationQuestions.filter(isRatingQuestion) ?? [];
 
+const REVERSED_YES_NO_QUESTIONS: Record<string, string> = {
+  "Do you often feel you matured earlier than others?": "Do you usually feel you developed at about the same pace as people around you?",
+  "Do you find it difficult to accept being ordinary?": "Is being ordinary something you can usually accept without much inner conflict?",
+  "Are you more motivated by challenge than comfort?": "Does comfort usually motivate you more than challenge?",
+  "Is it hard for you to act against your principles?": "Is it usually easy for you to compromise your principles when the situation asks for it?",
+  "Do you quickly notice hidden patterns?": "Do hidden patterns usually take you a while to notice?",
+  "Do you become impatient with unclear logic?": "Can you usually stay patient when the logic is unclear?",
+  "Do you often look calm outside but feel intense inside?": "Do your outward emotions usually match what you feel inside?",
+  "Do you recover quickly after anger?": "Does anger usually stay with you for a long time?",
+  "Under stress, do you carry things alone rather than ask for help?": "Under stress, do you usually ask for help instead of carrying things alone?",
+  "Under stress, do you avoid tasks or people?": "Under stress, do you usually stay engaged with tasks and people?",
+  "Do you dislike owing others favors?": "Are you generally comfortable owing others favors?",
+  "Do you need a lot of personal space in close relationships?": "In close relationships, are you usually comfortable with very little personal space?",
+  "Is it hard for you to follow authority you consider low-quality?": "Can you usually follow authority even when you consider it low-quality?",
+  "Do you mentally rank people by competence?": "Do you usually avoid mentally comparing people by competence?",
+  "Are you afraid of being seen as incompetent?": "Are you generally comfortable with others seeing your incompetence or inexperience?",
+  "Do you use achievement to prove your worth?": "Is your sense of worth usually separate from achievement?",
+  "Are you willing to admit blind spots?": "Is it usually hard for you to admit blind spots?",
+  "Do you prefer discovering things yourself rather than being told?": "Do you usually prefer being told directly rather than discovering things yourself?"
+};
+
+const ORIGINAL_BY_REVERSED_YES_NO = Object.fromEntries(
+  Object.entries(REVERSED_YES_NO_QUESTIONS).map(([original, reversed]) => [reversed, original])
+) as Record<string, string>;
+
 const yesNoQuestionsFor = (moduleIndex: number) =>
-  GUIDE_MODULES[moduleIndex]?.calibrationQuestions.filter((question) => !isRatingQuestion(question)) ?? [];
+  GUIDE_MODULES[moduleIndex]?.calibrationQuestions
+    .filter((question) => !isRatingQuestion(question))
+    .map((question, index) => (index % 2 === 1 ? REVERSED_YES_NO_QUESTIONS[question] ?? question : question)) ?? [];
 
 const questionId = (moduleId: string, kind: QuestionKind, index: number) => `${moduleId}:${kind}:${index}`;
 
@@ -87,20 +114,41 @@ const coerceAnalysis = (
     analysis.predictedAnswers.length > 0
       ? yesNoQuestions.map((question, index) => {
           const found = analysis.predictedAnswers.find((prediction) => prediction.question === question);
+          const originalQuestion = ORIGINAL_BY_REVERSED_YES_NO[question];
+          const foundOriginal = originalQuestion
+            ? analysis.predictedAnswers.find((prediction) => prediction.question === originalQuestion)
+            : undefined;
           return (
-            found ?? {
+            found ??
+            (foundOriginal
+              ? {
+                  question,
+                  predictedAnswer: !foundOriginal.predictedAnswer,
+                  rationale: `Reverse-worded calibration of: ${foundOriginal.rationale}`
+                }
+              : {
               question,
               predictedAnswer: index % 2 === 0,
               rationale: "Fallback prediction because the model did not return this item."
-            }
+                })
           );
         })
       : yesNoQuestions.map((question, index) => ({
           question,
-          predictedAnswer: index % 2 === 0,
+          predictedAnswer: ORIGINAL_BY_REVERSED_YES_NO[question] ? false : index % 2 === 0,
           rationale: "Fallback prediction because the model did not return calibration answers."
         }))
 });
+
+const predictionForAnsweredQuestion = (predictions: ModuleAnalysis["predictedAnswers"], question: string) => {
+  const exact = predictions.find((item) => item.question === question);
+  if (exact) {
+    return exact;
+  }
+  const originalQuestion = ORIGINAL_BY_REVERSED_YES_NO[question];
+  const original = originalQuestion ? predictions.find((item) => item.question === originalQuestion) : undefined;
+  return original ? { ...original, question, predictedAnswer: !original.predictedAnswer } : undefined;
+};
 
 const localModuleAnalysis = (moduleIndex: number, moduleAnswers: Answer[]) => {
   const module = GUIDE_MODULES[moduleIndex];
@@ -123,7 +171,7 @@ const localModuleAnalysis = (moduleIndex: number, moduleAnswers: Answer[]) => {
     confidence: textAnswers.length >= 3 ? "medium" : "low",
     predictedAnswers: yesNoQuestions.map((question) => ({
       question,
-      predictedAnswer: avgRating >= 6,
+      predictedAnswer: ORIGINAL_BY_REVERSED_YES_NO[question] ? avgRating < 6 : avgRating >= 6,
       rationale: "Local fallback based mainly on scoring intensity."
     }))
   };
@@ -373,7 +421,7 @@ export default function App() {
     );
     const predictions = analysis?.predictedAnswers ?? [];
     const matches = yesNoAnswers.filter((answer) => {
-      const prediction = predictions.find((item) => item.question === answer.question);
+      const prediction = predictionForAnsweredQuestion(predictions, answer.question);
       return prediction ? prediction.predictedAnswer === answer.value : false;
     }).length;
     const agreement = yesNoAnswers.length ? matches / yesNoAnswers.length : 1;
@@ -446,6 +494,20 @@ export default function App() {
       setSession((previous) => ({ ...previous, finalReport: localFinalReport(previous) }));
     } finally {
       setBusy(false);
+    }
+  };
+
+  const copyReport = async () => {
+    if (!session.finalReport) {
+      return;
+    }
+    setError("");
+    try {
+      await Clipboard.setStringAsync(session.finalReport);
+      Alert.alert("Copied", "Markdown report copied to clipboard.");
+    } catch (copyError) {
+      const detail = copyError instanceof Error ? copyError.message : "unknown error";
+      setError(`Copy failed. Detail: ${detail}`);
     }
   };
 
@@ -621,7 +683,7 @@ export default function App() {
               <FeedbackButton
                 style={styles.secondaryButton}
                 textStyle={styles.secondaryButtonText}
-                onPress={() => Clipboard.setStringAsync(session.finalReport).catch(() => undefined)}
+                onPress={copyReport}
               >
                 COPY MARKDOWN
               </FeedbackButton>
@@ -705,9 +767,6 @@ export default function App() {
               question={displayQuestionFor(yesNoQuestionKey, yesNoQuestion)}
               index={session.validateIndex + 1}
               total={yesNoQuestions.length}
-              prediction={currentAnalysis?.predictedAnswers.find(
-                (prediction) => prediction.question === yesNoQuestions[session.validateIndex]
-              )}
               onAnswer={answerYesNo}
               onRephrase={() => handleRephrase(yesNoQuestionKey, yesNoQuestion, "yesno")}
               rephraseBusy={rephrasingKey === yesNoQuestionKey}
@@ -731,7 +790,7 @@ export default function App() {
             />
           ) : null}
 
-          {currentAnalysis ? (
+          {currentAnalysis && session.phase !== "validate" ? (
             <View style={styles.analysisBox}>
               <Text style={styles.panelTitle}>Current section summary</Text>
               <Text style={styles.bodyText}>{currentAnalysis.summary}</Text>
@@ -911,7 +970,6 @@ function YesNoQuestion({
   question,
   index,
   total,
-  prediction,
   onAnswer,
   onRephrase,
   rephraseBusy
@@ -919,7 +977,6 @@ function YesNoQuestion({
   question: string;
   index: number;
   total: number;
-  prediction?: { predictedAnswer: boolean; rationale: string };
   onAnswer: (value: boolean) => void;
   onRephrase: () => void;
   rephraseBusy: boolean;
@@ -930,16 +987,6 @@ function YesNoQuestion({
         Calibration {index}/{total}
       </Text>
       <Text style={styles.question}>{question}</Text>
-      <FeedbackButton style={styles.rephraseButton} onPress={onRephrase} disabled={rephraseBusy} textStyle={styles.rephraseButtonText}>
-        {rephraseBusy ? "RE-PHRASING..." : "RE-PHRASE"}
-      </FeedbackButton>
-      {prediction ? (
-        <View style={styles.prediction}>
-          <Text style={styles.predictionText}>
-            App prediction: {prediction.predictedAnswer ? "YES" : "NO"} · {prediction.rationale}
-          </Text>
-        </View>
-      ) : null}
       <View style={styles.yesNoRow}>
         <FeedbackButton
           style={[styles.macroButton, styles.yesButton]}
@@ -958,6 +1005,9 @@ function YesNoQuestion({
           NO
         </FeedbackButton>
       </View>
+      <FeedbackButton style={styles.rephraseButton} onPress={onRephrase} disabled={rephraseBusy} textStyle={styles.rephraseButtonText}>
+        {rephraseBusy ? "RE-PHRASING..." : "RE-PHRASE"}
+      </FeedbackButton>
     </View>
   );
 }
