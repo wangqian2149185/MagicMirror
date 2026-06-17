@@ -1,4 +1,4 @@
-# Personality Portrait Mobile
+# MagicMirror Mobile
 
 An Expo React Native iOS app for a guided, non-diagnostic personality portrait interview based on `assets/personality_portrait_guide.md`.
 
@@ -37,3 +37,7 @@ Voice input uses native speech recognition, so use `npm run ios` instead of Expo
 The app stores setup and interview progress locally on the device. API keys are used directly from the app, which is convenient for a personal prototype but not appropriate for a public production app. For production, route model calls through your own backend.
 
 For Ollama on a physical iPhone, set the base URL to your Mac's LAN address, for example `http://192.168.1.10:11434`, because `localhost` on the phone means the phone itself.
+
+## App Store Notes
+
+The App Store bundle identifier is `com.qianwang.magicmirror`. Before submitting to App Review, create an App Store Connect app record with that Bundle ID and publish the privacy policy text in `PRIVACY_POLICY.md` at a public URL.

@@ -12,9 +12,11 @@
     ],
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.local.magicmirror",
+      "bundleIdentifier": "com.qianwang.magicmirror",
+      "buildNumber": "1",
       "icon": "./assets/icon.png",
       "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
         "NSSpeechRecognitionUsageDescription": "Voice input lets you answer open interview questions by speaking.",
         "NSMicrophoneUsageDescription": "The microphone is used only when you choose voice input for an answer."
       }
