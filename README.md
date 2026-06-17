@@ -32,6 +32,27 @@ An Expo React Native iOS app for a guided, non-diagnostic personality portrait i
 
 Voice input uses native speech recognition, so use `npm run ios` instead of Expo Go.
 
+## Use On iPhone Without The App Store
+
+The no-annual-fee option is the GitHub Pages PWA:
+
+1. Open `https://wangqian2149185.github.io/MagicMirror/` in Safari on iPhone.
+2. Tap Share.
+3. Tap Add to Home Screen.
+4. Open MagicMirror from the Home Screen icon.
+
+This version runs the full Free Local mode on the phone. Optional API-key model calls may be limited by browser CORS rules from each provider; for the most reliable no-fee setup, choose Free Local.
+
+## GitHub Pages Deployment
+
+The public web app is built with:
+
+```sh
+npm run build:web
+```
+
+Every push to `main` triggers `.github/workflows/deploy-pages.yml`, which publishes `dist/` to GitHub Pages.
+
 ## Provider Notes
 
 The app stores setup and interview progress locally on the device. API keys are used directly from the app, which is convenient for a personal prototype but not appropriate for a public production app. For production, route model calls through your own backend.
