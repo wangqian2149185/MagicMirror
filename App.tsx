@@ -11,16 +11,19 @@ import {
   Pressable,
   SafeAreaView,
   ScrollView,
+  StyleProp,
   StyleSheet,
   Text,
+  TextStyle,
   TextInput,
-  View
+  View,
+  ViewStyle
 } from "react-native";
 import { Picker } from "@react-native-picker/picker";
 
 import { GUIDE_MODULES, SAFETY_BOUNDARY } from "./src/data/interviewGuide";
 import { getProvider, PROVIDERS } from "./src/data/providers";
-import { analyzeModule, effectiveModel, generateFinalReport } from "./src/lib/ai";
+import { analyzeModule, effectiveModel, generateFinalReport, rephraseQuestion } from "./src/lib/ai";
 import { Answer, AppConfig, ModuleAnalysis, QuestionKind, SessionState } from "./src/types";
 
 const CONFIG_KEY = "portrait-app-config";
@@ -181,6 +184,16 @@ This report avoids diagnosis and fixed labels. More counterexamples and correcti
 `;
 };
 
+const localRephraseQuestion = (question: string, kind: QuestionKind) => {
+  if (kind === "rating") {
+    return `On the same 1 to 10 scale, where 1 means very low and 10 means very high: ${question.replace(/^From 1 to 10,\s*/i, "")}`;
+  }
+  if (kind === "yesno") {
+    return `Thinking about your usual real-life behavior, would your honest answer be YES or NO: ${question}`;
+  }
+  return `Said another way, with a specific example if one comes to mind: ${question}`;
+};
+
 export default function App() {
   const [config, setConfig] = useState<AppConfig>(defaultConfig);
   const [session, setSession] = useState<SessionState>(defaultSession);
@@ -190,6 +203,8 @@ export default function App() {
   const [listening, setListening] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [questionVariants, setQuestionVariants] = useState<Record<string, string>>({});
+  const [rephrasingKey, setRephrasingKey] = useState("");
 
   const currentModule = GUIDE_MODULES[session.moduleIndex];
   const provider = getProvider(config.providerId);
@@ -476,6 +491,36 @@ export default function App() {
     }
   };
 
+  const editApiSettings = () => {
+    if (listening) {
+      ExpoSpeechRecognitionModule.stop();
+    }
+    setListening(false);
+    setError("");
+    setIsConfigured(false);
+  };
+
+  const displayQuestionFor = (key: string, question: string) => questionVariants[key] ?? question;
+
+  const handleRephrase = async (key: string, question: string, kind: QuestionKind) => {
+    if (!question || rephrasingKey) {
+      return;
+    }
+    setRephrasingKey(key);
+    setError("");
+    const currentWording = displayQuestionFor(key, question);
+    try {
+      const nextWording = await rephraseQuestion(config, { question, previousWording: currentWording, kind });
+      setQuestionVariants((previous) => ({ ...previous, [key]: nextWording || localRephraseQuestion(question, kind) }));
+    } catch (rephraseError) {
+      const detail = rephraseError instanceof Error ? rephraseError.message : "unknown error";
+      setQuestionVariants((previous) => ({ ...previous, [key]: localRephraseQuestion(question, kind) }));
+      setError(`Question re-phrase used a local fallback. Detail: ${detail}`);
+    } finally {
+      setRephrasingKey("");
+    }
+  };
+
   if (!isReady) {
     return (
       <SafeAreaView style={styles.screen}>
@@ -544,9 +589,9 @@ export default function App() {
             </Text>
           </View>
 
-          <Pressable style={styles.primaryButton} onPress={saveConfig}>
-            <Text style={styles.primaryButtonText}>START INTERVIEW</Text>
-          </Pressable>
+          <FeedbackButton style={styles.primaryButton} onPress={saveConfig} textStyle={styles.primaryButtonText}>
+            START INTERVIEW
+          </FeedbackButton>
         </ScrollView>
       </SafeAreaView>
     );
@@ -557,7 +602,7 @@ export default function App() {
       <SafeAreaView style={styles.screen}>
         <StatusBar style="dark" />
         <ScrollView contentContainerStyle={styles.content}>
-          <Header onReset={resetInterview} />
+          <Header onReset={resetInterview} onEditConfig={editApiSettings} />
           <Text style={styles.sectionEyebrow}>Complete</Text>
           <Text style={styles.title}>Final Results</Text>
           <Text style={styles.bodyText}>
@@ -565,20 +610,21 @@ export default function App() {
           </Text>
           {busy ? <ActivityIndicator size="large" /> : null}
           {!session.finalReport ? (
-            <Pressable style={styles.primaryButton} onPress={generateReport} disabled={busy}>
-              <Text style={styles.primaryButtonText}>GENERATE REPORT</Text>
-            </Pressable>
+            <FeedbackButton style={styles.primaryButton} onPress={generateReport} disabled={busy} textStyle={styles.primaryButtonText}>
+              GENERATE REPORT
+            </FeedbackButton>
           ) : (
             <>
               <View style={styles.reportBox}>
                 <Text style={styles.reportText}>{session.finalReport}</Text>
               </View>
-              <Pressable
+              <FeedbackButton
                 style={styles.secondaryButton}
+                textStyle={styles.secondaryButtonText}
                 onPress={() => Clipboard.setStringAsync(session.finalReport).catch(() => undefined)}
               >
-                <Text style={styles.secondaryButtonText}>COPY MARKDOWN</Text>
-              </Pressable>
+                COPY MARKDOWN
+              </FeedbackButton>
             </>
           )}
           {error ? <Text style={styles.errorText}>{error}</Text> : null}
@@ -591,12 +637,22 @@ export default function App() {
     return null;
   }
 
+  const openQuestion = openQuestions[session.openIndex] ?? "";
+  const openQuestionKey = questionId(currentModule.id, "open", session.openIndex);
+  const ratingQuestion = ratingQuestions[session.ratingIndex] ?? "";
+  const ratingQuestionKey = questionId(currentModule.id, "rating", session.ratingIndex);
+  const yesNoQuestion = yesNoQuestions[session.validateIndex] ?? "";
+  const yesNoQuestionKey = questionId(currentModule.id, "yesno", session.validateIndex);
+  const calibrationQuestion =
+    "The app's predictions did not reach 80% agreement. What did it misunderstand? Add a correction, exception, or counterexample.";
+  const calibrationQuestionKey = `${currentModule.id}:calibrate:0`;
+
   return (
     <SafeAreaView style={styles.screen}>
       <StatusBar style="dark" />
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.flex}>
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-          <Header onReset={resetInterview} />
+          <Header onReset={resetInterview} onEditConfig={editApiSettings} />
           <Text style={styles.sectionEyebrow}>
             Section {session.moduleIndex + 1} of {GUIDE_MODULES.length}
           </Text>
@@ -605,7 +661,7 @@ export default function App() {
 
           {session.phase === "open" ? (
             <OpenQuestion
-              question={openQuestions[session.openIndex] ?? ""}
+              question={displayQuestionFor(openQuestionKey, openQuestion)}
               index={session.openIndex + 1}
               total={openQuestions.length}
               draft={draft}
@@ -614,15 +670,19 @@ export default function App() {
               onStartVoice={startVoice}
               onStopVoice={stopVoice}
               onNext={answerOpen}
+              onRephrase={() => handleRephrase(openQuestionKey, openQuestion, "open")}
+              rephraseBusy={rephrasingKey === openQuestionKey}
             />
           ) : null}
 
           {session.phase === "rating" ? (
             <RatingQuestion
-              question={ratingQuestions[session.ratingIndex] ?? ""}
+              question={displayQuestionFor(ratingQuestionKey, ratingQuestion)}
               index={session.ratingIndex + 1}
               total={ratingQuestions.length}
               onAnswer={answerRating}
+              onRephrase={() => handleRephrase(ratingQuestionKey, ratingQuestion, "rating")}
+              rephraseBusy={rephrasingKey === ratingQuestionKey}
             />
           ) : null}
 
@@ -634,27 +694,29 @@ export default function App() {
                 predictions align with you at 80% or better.
               </Text>
               {busy ? <ActivityIndicator size="large" /> : null}
-              <Pressable style={styles.primaryButton} onPress={runModuleAnalysis} disabled={busy}>
-                <Text style={styles.primaryButtonText}>TRAIN THIS SECTION</Text>
-              </Pressable>
+              <FeedbackButton style={styles.primaryButton} onPress={runModuleAnalysis} disabled={busy} textStyle={styles.primaryButtonText}>
+                TRAIN THIS SECTION
+              </FeedbackButton>
             </View>
           ) : null}
 
           {session.phase === "validate" ? (
             <YesNoQuestion
-              question={yesNoQuestions[session.validateIndex] ?? ""}
+              question={displayQuestionFor(yesNoQuestionKey, yesNoQuestion)}
               index={session.validateIndex + 1}
               total={yesNoQuestions.length}
               prediction={currentAnalysis?.predictedAnswers.find(
                 (prediction) => prediction.question === yesNoQuestions[session.validateIndex]
               )}
               onAnswer={answerYesNo}
+              onRephrase={() => handleRephrase(yesNoQuestionKey, yesNoQuestion, "yesno")}
+              rephraseBusy={rephrasingKey === yesNoQuestionKey}
             />
           ) : null}
 
           {session.phase === "calibrate" ? (
             <OpenQuestion
-              question="The app's predictions did not reach 80% agreement. What did it misunderstand? Add a correction, exception, or counterexample."
+              question={displayQuestionFor(calibrationQuestionKey, calibrationQuestion)}
               index={1}
               total={1}
               draft={draft}
@@ -663,6 +725,8 @@ export default function App() {
               onStartVoice={startVoice}
               onStopVoice={stopVoice}
               onNext={saveCalibration}
+              onRephrase={() => handleRephrase(calibrationQuestionKey, calibrationQuestion, "open")}
+              rephraseBusy={rephrasingKey === calibrationQuestionKey}
               buttonText="SAVE AND CONTINUE"
             />
           ) : null}
@@ -684,16 +748,54 @@ export default function App() {
   );
 }
 
-function Header({ onReset }: { onReset: () => void }) {
+function FeedbackButton({
+  children,
+  onPress,
+  style,
+  pressedStyle,
+  textStyle,
+  disabled = false,
+  accessibilityLabel
+}: {
+  children: string;
+  onPress: () => void;
+  style: StyleProp<ViewStyle>;
+  pressedStyle?: StyleProp<ViewStyle>;
+  textStyle: StyleProp<TextStyle>;
+  disabled?: boolean;
+  accessibilityLabel?: string;
+}) {
+  return (
+    <Pressable
+      accessibilityLabel={accessibilityLabel || children}
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => [
+        style,
+        pressed && !disabled ? pressedStyle ?? styles.buttonPressed : null,
+        disabled ? styles.buttonDisabled : null
+      ]}
+    >
+      <Text style={textStyle}>{children}</Text>
+    </Pressable>
+  );
+}
+
+function Header({ onReset, onEditConfig }: { onReset: () => void; onEditConfig: () => void }) {
   return (
     <View style={styles.header}>
       <View>
         <Text style={styles.headerTitle}>Portrait Interview</Text>
         <Text style={styles.headerMeta}>Private prototype</Text>
       </View>
-      <Pressable style={styles.resetButton} onPress={onReset}>
-        <Text style={styles.resetButtonText}>RESET</Text>
-      </Pressable>
+      <View style={styles.headerActions}>
+        <FeedbackButton style={styles.resetButton} onPress={onEditConfig} textStyle={styles.resetButtonText}>
+          API SETUP
+        </FeedbackButton>
+        <FeedbackButton style={styles.resetButton} onPress={onReset} textStyle={styles.resetButtonText}>
+          RESET
+        </FeedbackButton>
+      </View>
     </View>
   );
 }
@@ -708,6 +810,8 @@ function OpenQuestion({
   onStartVoice,
   onStopVoice,
   onNext,
+  onRephrase,
+  rephraseBusy,
   buttonText = "NEXT"
 }: {
   question: string;
@@ -719,6 +823,8 @@ function OpenQuestion({
   onStartVoice: () => void;
   onStopVoice: () => void;
   onNext: () => void;
+  onRephrase: () => void;
+  rephraseBusy: boolean;
   buttonText?: string;
 }) {
   return (
@@ -727,6 +833,9 @@ function OpenQuestion({
         Open question {index}/{total}
       </Text>
       <Text style={styles.question}>{question}</Text>
+      <FeedbackButton style={styles.rephraseButton} onPress={onRephrase} disabled={rephraseBusy} textStyle={styles.rephraseButtonText}>
+        {rephraseBusy ? "RE-PHRASING..." : "RE-PHRASE"}
+      </FeedbackButton>
       <TextInput
         style={styles.textArea}
         value={draft}
@@ -736,12 +845,16 @@ function OpenQuestion({
         textAlignVertical="top"
       />
       <View style={styles.voiceRow}>
-        <Pressable style={[styles.voiceButton, listening && styles.voiceButtonActive]} onPress={listening ? onStopVoice : onStartVoice}>
-          <Text style={styles.voiceButtonText}>{listening ? "STOP VOICE" : "VOICE INPUT"}</Text>
-        </Pressable>
-        <Pressable style={styles.primaryButtonSmall} onPress={onNext}>
-          <Text style={styles.primaryButtonText}>{buttonText}</Text>
-        </Pressable>
+        <FeedbackButton
+          style={[styles.voiceButton, listening && styles.voiceButtonActive]}
+          onPress={listening ? onStopVoice : onStartVoice}
+          textStyle={styles.voiceButtonText}
+        >
+          {listening ? "STOP VOICE" : "VOICE INPUT"}
+        </FeedbackButton>
+        <FeedbackButton style={styles.primaryButtonSmall} onPress={onNext} textStyle={styles.primaryButtonText}>
+          {buttonText}
+        </FeedbackButton>
       </View>
     </View>
   );
@@ -751,12 +864,16 @@ function RatingQuestion({
   question,
   index,
   total,
-  onAnswer
+  onAnswer,
+  onRephrase,
+  rephraseBusy
 }: {
   question: string;
   index: number;
   total: number;
   onAnswer: (value: number) => void;
+  onRephrase: () => void;
+  rephraseBusy: boolean;
 }) {
   return (
     <View style={styles.panel}>
@@ -764,6 +881,9 @@ function RatingQuestion({
         Scoring question {index}/{total}
       </Text>
       <Text style={styles.question}>{question}</Text>
+      <FeedbackButton style={styles.rephraseButton} onPress={onRephrase} disabled={rephraseBusy} textStyle={styles.rephraseButtonText}>
+        {rephraseBusy ? "RE-PHRASING..." : "RE-PHRASE"}
+      </FeedbackButton>
       <View style={styles.signalRow}>
         {Array.from({ length: 10 }, (_, itemIndex) => {
           const value = itemIndex + 1;
@@ -771,7 +891,11 @@ function RatingQuestion({
             <Pressable
               key={value}
               accessibilityLabel={`Score ${value}`}
-              style={[styles.signalButton, { height: 24 + value * 7 }]}
+              style={({ pressed }) => [
+                styles.signalButton,
+                { height: 24 + value * 7 },
+                pressed ? styles.signalButtonPressed : null
+              ]}
               onPress={() => onAnswer(value)}
             >
               <Text style={styles.signalText}>{value}</Text>
@@ -788,13 +912,17 @@ function YesNoQuestion({
   index,
   total,
   prediction,
-  onAnswer
+  onAnswer,
+  onRephrase,
+  rephraseBusy
 }: {
   question: string;
   index: number;
   total: number;
   prediction?: { predictedAnswer: boolean; rationale: string };
   onAnswer: (value: boolean) => void;
+  onRephrase: () => void;
+  rephraseBusy: boolean;
 }) {
   return (
     <View style={styles.panel}>
@@ -802,6 +930,9 @@ function YesNoQuestion({
         Calibration {index}/{total}
       </Text>
       <Text style={styles.question}>{question}</Text>
+      <FeedbackButton style={styles.rephraseButton} onPress={onRephrase} disabled={rephraseBusy} textStyle={styles.rephraseButtonText}>
+        {rephraseBusy ? "RE-PHRASING..." : "RE-PHRASE"}
+      </FeedbackButton>
       {prediction ? (
         <View style={styles.prediction}>
           <Text style={styles.predictionText}>
@@ -810,12 +941,22 @@ function YesNoQuestion({
         </View>
       ) : null}
       <View style={styles.yesNoRow}>
-        <Pressable style={[styles.macroButton, styles.yesButton]} onPress={() => onAnswer(true)}>
-          <Text style={styles.macroButtonText}>YES</Text>
-        </Pressable>
-        <Pressable style={[styles.macroButton, styles.noButton]} onPress={() => onAnswer(false)}>
-          <Text style={styles.macroButtonText}>NO</Text>
-        </Pressable>
+        <FeedbackButton
+          style={[styles.macroButton, styles.yesButton]}
+          pressedStyle={styles.yesButtonPressed}
+          onPress={() => onAnswer(true)}
+          textStyle={styles.macroButtonText}
+        >
+          YES
+        </FeedbackButton>
+        <FeedbackButton
+          style={[styles.macroButton, styles.noButton]}
+          pressedStyle={styles.noButtonPressed}
+          onPress={() => onAnswer(false)}
+          textStyle={styles.macroButtonText}
+        >
+          NO
+        </FeedbackButton>
       </View>
     </View>
   );
@@ -854,6 +995,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between"
   },
+  headerActions: {
+    flexDirection: "row",
+    gap: 8
+  },
   headerTitle: {
     color: "#17201B",
     fontSize: 18,
@@ -876,6 +1021,14 @@ const styles = StyleSheet.create({
     color: "#3C473F",
     fontSize: 12,
     fontWeight: "800"
+  },
+  buttonPressed: {
+    backgroundColor: "#C9D8D3",
+    borderColor: "#214F43",
+    transform: [{ scale: 0.98 }]
+  },
+  buttonDisabled: {
+    opacity: 0.55
   },
   sectionEyebrow: {
     color: "#866A28",
@@ -952,6 +1105,21 @@ const styles = StyleSheet.create({
     fontSize: 22,
     lineHeight: 29,
     fontWeight: "800"
+  },
+  rephraseButton: {
+    minHeight: 42,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#9CA79D",
+    backgroundColor: "#F3F6F2",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 12
+  },
+  rephraseButtonText: {
+    color: "#33443A",
+    fontSize: 13,
+    fontWeight: "900"
   },
   textArea: {
     minHeight: 170,
@@ -1040,6 +1208,10 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
     paddingBottom: 7
   },
+  signalButtonPressed: {
+    backgroundColor: "#AA6630",
+    transform: [{ scaleY: 0.96 }]
+  },
   signalText: {
     color: "#FFFFFF",
     fontSize: 12,
@@ -1071,8 +1243,16 @@ const styles = StyleSheet.create({
   yesButton: {
     backgroundColor: "#1D6A58"
   },
+  yesButtonPressed: {
+    backgroundColor: "#0E493B",
+    transform: [{ scale: 0.98 }]
+  },
   noButton: {
     backgroundColor: "#8A3E36"
+  },
+  noButtonPressed: {
+    backgroundColor: "#693029",
+    transform: [{ scale: 0.98 }]
   },
   macroButtonText: {
     color: "#FFFFFF",

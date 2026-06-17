@@ -163,6 +163,41 @@ Answers so far: ${compactJson(args.answers)}`;
   };
 };
 
+export const rephraseQuestion = async (
+  config: AppConfig,
+  args: {
+    question: string;
+    previousWording?: string;
+    kind: "open" | "rating" | "yesno";
+  }
+) => {
+  const prompt = `Rephrase this interview question without changing its intent.
+
+Rules:
+- Return one clear question only.
+- Preserve the exact underlying meaning.
+- Do not add a new topic.
+- If it is a yes/no question, keep it answerable with YES or NO.
+- If it is a 1-10 scoring question, keep the same 1-10 scale.
+- You may add a short concrete example only if it clarifies the same intent.
+
+Question type: ${args.kind}
+Original question: ${args.question}
+Current wording on screen: ${args.previousWording || args.question}`;
+
+  const raw = await callModel(config, [
+    { role: "system", content: systemPrompt },
+    { role: "user", content: prompt }
+  ]);
+
+  return raw
+    .trim()
+    .replace(/^["']|["']$/g, "")
+    .split("\n")
+    .map((line: string) => line.replace(/^[-*\d.)\s]+/, "").trim())
+    .filter(Boolean)[0] ?? args.question;
+};
+
 export const generateFinalReport = async (
   config: AppConfig,
   args: {
