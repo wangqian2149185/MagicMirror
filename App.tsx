@@ -30,6 +30,19 @@ const CONFIG_KEY = "portrait-app-config";
 const SESSION_KEY = "portrait-app-session";
 const REPORT_DISCLAIMER =
   "***Reference only. This result is for self-reflection and the app is not responsible for decisions, outcomes, or interpretations based on it.***";
+const RADAR_SIZE = 250;
+
+type PolygonItem = {
+  label: string;
+  score: number;
+  detail: string;
+};
+
+type PolygonSection = {
+  title: string;
+  score: number;
+  items: PolygonItem[];
+};
 
 const defaultConfig: AppConfig = {
   providerId: "openai",
@@ -354,6 +367,90 @@ const mbtiMarkdown = (assessment: MbtiAssessment | null) => {
   return lines.join("\n");
 };
 
+const cleanMarkdownLabel = (text: string) =>
+  text
+    .replace(/\*\*/g, "")
+    .replace(/[`#>*_]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const scoreForText = (text: string) => {
+  const normalized = text.toLowerCase();
+  const words = normalized.split(/\s+/).filter(Boolean);
+  const positive = ["strong", "important", "central", "clear", "high", "repeated", "core", "main"].filter((word) =>
+    normalized.includes(word)
+  ).length;
+  const uncertain = ["uncertain", "tentative", "possible", "may", "low", "limited", "missing"].filter((word) =>
+    normalized.includes(word)
+  ).length;
+  const raw = 42 + Math.min(28, words.length / 3) + positive * 6 - uncertain * 5;
+  return Math.max(18, Math.min(94, Math.round(raw)));
+};
+
+const extractSectionItems = (content: string): PolygonItem[] => {
+  const boldMatches = Array.from(content.matchAll(/\*\*([^*]+)\*\*/g))
+    .map((match) => cleanMarkdownLabel(match[1] ?? ""))
+    .filter(Boolean);
+  const bulletMatches = content
+    .split("\n")
+    .map((line) => line.match(/^\s*[-*]\s+(.+)$/)?.[1])
+    .filter((line): line is string => Boolean(line))
+    .map((line) => cleanMarkdownLabel(line.split(":")[0] ?? line))
+    .filter(Boolean);
+  const sentenceMatches = content
+    .split(/(?<=[.!?])\s+/)
+    .map(cleanMarkdownLabel)
+    .filter((line) => line.length > 20)
+    .slice(0, 4);
+  const labels = (boldMatches.length ? boldMatches : bulletMatches.length ? bulletMatches : sentenceMatches).slice(0, 8);
+  return labels.map((label) => {
+    const escapedLabel = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const detail =
+      content
+        .split("\n")
+        .find((line) => new RegExp(escapedLabel, "i").test(cleanMarkdownLabel(line))) ?? label;
+    return {
+      label: label.length > 34 ? `${label.slice(0, 31)}...` : label,
+      score: scoreForText(detail),
+      detail: cleanMarkdownLabel(detail)
+    };
+  });
+};
+
+const parsePolygonSections = (report: string): PolygonSection[] => {
+  const sections: Array<{ title: string; content: string }> = [];
+  let activeSection: { title: string; content: string[] } | null = null;
+  const flushSection = () => {
+    if (activeSection) {
+      sections.push({ title: activeSection.title, content: activeSection.content.join("\n") });
+    }
+  };
+
+  for (const line of report.split("\n")) {
+    const title = line.match(/^##\s+(.+)$/)?.[1];
+    if (title) {
+      flushSection();
+      activeSection = { title: cleanMarkdownLabel(title), content: [] };
+      continue;
+    }
+    activeSection?.content.push(line);
+  }
+  flushSection();
+
+  return sections
+    .filter((section) => section.title && !/^mbti/i.test(section.title))
+    .map((section) => {
+      const items = extractSectionItems(section.content);
+      return {
+        title: section.title,
+        score: items.length
+          ? Math.round(items.reduce((sum, item) => sum + item.score, 0) / items.length)
+          : scoreForText(section.content),
+        items
+      };
+    });
+};
+
 const localRephraseQuestion = (question: string, kind: QuestionKind) => {
   if (kind === "rating") {
     return `On the same 1 to 10 scale, where 1 means very low and 10 means very high: ${question.replace(/^From 1 to 10,\s*/i, "")}`;
@@ -375,7 +472,7 @@ export default function App() {
   const [error, setError] = useState("");
   const [questionVariants, setQuestionVariants] = useState<Record<string, string>>({});
   const [rephrasingKey, setRephrasingKey] = useState("");
-  const [resultPage, setResultPage] = useState<"portrait" | "mbti">("portrait");
+  const [resultPage, setResultPage] = useState<"portrait" | "mbti" | "polygon">("portrait");
 
   const currentModule = GUIDE_MODULES[session.moduleIndex];
   const provider = getProvider(config.providerId);
@@ -834,13 +931,22 @@ export default function App() {
                 >
                   MBTI
                 </FeedbackButton>
+                <FeedbackButton
+                  style={[styles.tabButton, resultPage === "polygon" && styles.tabButtonActive]}
+                  textStyle={[styles.tabButtonText, resultPage === "polygon" && styles.tabButtonTextActive]}
+                  onPress={() => setResultPage("polygon")}
+                >
+                  POLYGON
+                </FeedbackButton>
               </View>
               {resultPage === "portrait" ? (
                 <View style={styles.reportBox}>
                   <Text style={styles.reportText}>{session.finalReport}</Text>
                 </View>
-              ) : (
+              ) : resultPage === "mbti" ? (
                 <MbtiResult assessment={session.mbtiAssessment} />
+              ) : (
+                <PolygonResult sections={parsePolygonSections(session.finalReport)} />
               )}
               <FeedbackButton
                 style={styles.secondaryButton}
@@ -1221,6 +1327,148 @@ function MbtiResult({ assessment }: { assessment: MbtiAssessment | null }) {
   );
 }
 
+function RadarChart({ title, items }: { title: string; items: PolygonItem[] }) {
+  const size = RADAR_SIZE;
+  const center = size / 2;
+  const maxRadius = size * 0.34;
+  const safeItems = items.length >= 3 ? items : [...items, ...items, ...items].slice(0, 3);
+  const points = safeItems.map((item, index) => {
+    const angle = -Math.PI / 2 + (Math.PI * 2 * index) / safeItems.length;
+    const radius = maxRadius * (Math.max(10, Math.min(100, item.score)) / 100);
+    const outerRadius = maxRadius + 24;
+    return {
+      item,
+      x: center + Math.cos(angle) * radius,
+      y: center + Math.sin(angle) * radius,
+      labelX: center + Math.cos(angle) * outerRadius,
+      labelY: center + Math.sin(angle) * outerRadius
+    };
+  });
+  const edges = points.map((point, index) => {
+    const next = points[(index + 1) % points.length] ?? point;
+    const dx = next.x - point.x;
+    const dy = next.y - point.y;
+    return {
+      left: (point.x + next.x) / 2 - Math.sqrt(dx * dx + dy * dy) / 2,
+      top: (point.y + next.y) / 2 - 1,
+      width: Math.sqrt(dx * dx + dy * dy),
+      rotate: `${Math.atan2(dy, dx)}rad`
+    };
+  });
+
+  return (
+    <View style={styles.radarCard}>
+      <Text style={styles.radarTitle}>{title}</Text>
+      <View style={[styles.radarCanvas, { width: size, height: size }]}>
+        {[0.25, 0.5, 0.75, 1].map((scale) => (
+          <View
+            key={scale}
+            style={[
+              styles.radarRing,
+              {
+                width: maxRadius * 2 * scale,
+                height: maxRadius * 2 * scale,
+                borderRadius: maxRadius * scale,
+                left: center - maxRadius * scale,
+                top: center - maxRadius * scale
+              }
+            ]}
+          />
+        ))}
+        {points.map((point, index) => (
+          <View
+            key={`spoke-${index}`}
+            style={[
+              styles.radarSpoke,
+              {
+                left: center,
+                top: center,
+                width: maxRadius,
+                transform: [{ rotate: `${(-Math.PI / 2 + (Math.PI * 2 * index) / points.length)}rad` }]
+              }
+            ]}
+          />
+        ))}
+        {edges.map((edge, index) => (
+          <View
+            key={`edge-${index}`}
+            style={[
+              styles.radarEdge,
+              {
+                left: edge.left,
+                top: edge.top,
+                width: edge.width,
+                transform: [{ rotate: edge.rotate }]
+              }
+            ]}
+          />
+        ))}
+        {points.map((point, index) => (
+          <View key={`point-${index}`} style={[styles.radarPoint, { left: point.x - 5, top: point.y - 5 }]} />
+        ))}
+        {points.map((point, index) => (
+          <Text
+            key={`label-${index}`}
+            numberOfLines={2}
+            style={[
+              styles.radarLabel,
+              {
+                left: Math.max(0, Math.min(size - 70, point.labelX - 35)),
+                top: Math.max(0, Math.min(size - 32, point.labelY - 12))
+              }
+            ]}
+          >
+            {point.item.label}
+          </Text>
+        ))}
+      </View>
+      <View style={styles.radarLegend}>
+        {items.map((item, index) => (
+          <Text key={`${item.label}-${index}`} style={styles.reasonText}>
+            * {item.label}: {item.score}
+          </Text>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+function PolygonResult({ sections }: { sections: PolygonSection[] }) {
+  if (!sections.length) {
+    return (
+      <View style={styles.reportBox}>
+        <Text style={styles.reportText}>Generate or regenerate the summary first to create polygon charts.</Text>
+      </View>
+    );
+  }
+  const overviewItems = sections.map((section) => ({
+    label: section.title,
+    score: section.score,
+    detail: section.title
+  }));
+  return (
+    <View style={styles.polygonBox}>
+      <Text style={styles.panelTitle}>Summary Polygon</Text>
+      <Text style={styles.bodyText}>
+        The overview chart has one vertex per summary section. Each section chart uses bold sub-items first, then
+        bullet items when bold sub-items are not present.
+      </Text>
+      <RadarChart title="Overall sections" items={overviewItems} />
+      {sections.map((section) => (
+        <RadarChart
+          key={section.title}
+          title={section.title}
+          items={
+            section.items.length
+              ? section.items
+              : [{ label: section.title, score: section.score, detail: section.title }]
+          }
+        />
+      ))}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
@@ -1585,6 +1833,14 @@ const styles = StyleSheet.create({
     padding: 14,
     gap: 14
   },
+  polygonBox: {
+    borderWidth: 1,
+    borderColor: "#D9DDD4",
+    borderRadius: 8,
+    backgroundColor: "#FFFFFF",
+    padding: 14,
+    gap: 14
+  },
   mbtiType: {
     color: "#17201B",
     fontSize: 46,
@@ -1647,6 +1903,62 @@ const styles = StyleSheet.create({
     color: "#3B443E",
     fontSize: 14,
     lineHeight: 20
+  },
+  radarCard: {
+    borderTopWidth: 1,
+    borderTopColor: "#E2E5DE",
+    paddingTop: 12,
+    gap: 10,
+    alignItems: "center"
+  },
+  radarTitle: {
+    alignSelf: "stretch",
+    color: "#17201B",
+    fontSize: 17,
+    fontWeight: "900"
+  },
+  radarCanvas: {
+    position: "relative",
+    alignSelf: "center"
+  },
+  radarRing: {
+    position: "absolute",
+    borderWidth: 1,
+    borderColor: "#D8DED5",
+    backgroundColor: "transparent"
+  },
+  radarSpoke: {
+    position: "absolute",
+    height: 1,
+    backgroundColor: "#E5E9E2"
+  },
+  radarEdge: {
+    position: "absolute",
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: "#D88C4B"
+  },
+  radarPoint: {
+    position: "absolute",
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: "#1D4F43",
+    borderWidth: 1,
+    borderColor: "#FFFFFF"
+  },
+  radarLabel: {
+    position: "absolute",
+    width: 70,
+    color: "#33443A",
+    fontSize: 10,
+    lineHeight: 12,
+    textAlign: "center",
+    fontWeight: "800"
+  },
+  radarLegend: {
+    alignSelf: "stretch",
+    gap: 4
   },
   errorText: {
     color: "#9B2C22",
