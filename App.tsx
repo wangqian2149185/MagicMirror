@@ -23,11 +23,13 @@ import { Picker } from "@react-native-picker/picker";
 
 import { GUIDE_MODULES, SAFETY_BOUNDARY } from "./src/data/interviewGuide";
 import { getProvider, PROVIDERS } from "./src/data/providers";
-import { analyzeModule, effectiveModel, generateFinalReport, rephraseQuestion } from "./src/lib/ai";
-import { Answer, AppConfig, ModuleAnalysis, QuestionKind, SessionState } from "./src/types";
+import { analyzeModule, effectiveModel, generateFinalReport, generateMbtiAssessment, rephraseQuestion } from "./src/lib/ai";
+import { Answer, AppConfig, MbtiAssessment, MbtiDimension, ModuleAnalysis, QuestionKind, SessionState } from "./src/types";
 
 const CONFIG_KEY = "portrait-app-config";
 const SESSION_KEY = "portrait-app-session";
+const REPORT_DISCLAIMER =
+  "***Reference only. This result is for self-reflection and the app is not responsible for decisions, outcomes, or interpretations based on it.***";
 
 const defaultConfig: AppConfig = {
   providerId: "openai",
@@ -45,7 +47,8 @@ const defaultSession: SessionState = {
   validateIndex: 0,
   answers: [],
   analyses: [],
-  finalReport: ""
+  finalReport: "",
+  mbtiAssessment: null
 };
 
 const isRatingQuestion = (question: string) => /^from 1 to 10/i.test(question.trim());
@@ -186,7 +189,9 @@ const localFinalReport = (session: SessionState) => {
     .slice(0, 8)
     .join("\n");
 
-  return `# Personality Portrait
+  return `${REPORT_DISCLAIMER}
+
+# Personality Portrait
 
 ## Core Summary
 This is a local draft because model-based report generation was unavailable. The strongest material comes from the user's concrete examples and repeated patterns across modules.
@@ -232,6 +237,123 @@ This report avoids diagnosis and fixed labels. More counterexamples and correcti
 `;
 };
 
+const ensureReportDisclaimer = (report: string) => {
+  const trimmed = report.trim();
+  return trimmed.startsWith(REPORT_DISCLAIMER) ? trimmed : `${REPORT_DISCLAIMER}\n\n${trimmed}`;
+};
+
+const mbtiDimensionDefaults: MbtiDimension[] = [
+  { key: "EI", leftLetter: "E", rightLetter: "I", leftScore: 50, chosenLetter: "E", rationale: [] },
+  { key: "SN", leftLetter: "S", rightLetter: "N", leftScore: 50, chosenLetter: "S", rationale: [] },
+  { key: "TF", leftLetter: "T", rightLetter: "F", leftScore: 50, chosenLetter: "T", rationale: [] },
+  { key: "JP", leftLetter: "J", rightLetter: "P", leftScore: 50, chosenLetter: "J", rationale: [] }
+];
+
+const normalizeMbtiAssessment = (assessment: MbtiAssessment): MbtiAssessment => {
+  const dimensions = mbtiDimensionDefaults.map((fallback) => {
+    const found = assessment.dimensions.find((dimension) => dimension.key === fallback.key);
+    const leftScore = Math.max(0, Math.min(100, Math.round(found?.leftScore ?? fallback.leftScore)));
+    const chosenLetter = found?.chosenLetter || (leftScore >= 50 ? fallback.leftLetter : fallback.rightLetter);
+    return {
+      ...fallback,
+      ...found,
+      leftScore,
+      chosenLetter,
+      rationale: found?.rationale?.filter(Boolean).slice(0, 3) ?? fallback.rationale
+    };
+  });
+  return {
+    type: dimensions.map((dimension) => dimension.chosenLetter).join(""),
+    confidence: assessment.confidence,
+    summary: assessment.summary,
+    dimensions
+  };
+};
+
+const localMbtiAssessment = (session: SessionState): MbtiAssessment => {
+  const combined = [
+    ...session.answers.map((answer) => `${answer.question} ${String(answer.value)}`),
+    ...session.analyses.flatMap((analysis) => [analysis.summary, ...analysis.patterns, ...analysis.observations])
+  ]
+    .join(" ")
+    .toLowerCase();
+  const count = (words: string[]) => words.reduce((sum, word) => sum + (combined.includes(word) ? 1 : 0), 0);
+  const score = (leftWords: string[], rightWords: string[]) => {
+    const left = count(leftWords);
+    const right = count(rightWords);
+    if (left + right === 0) {
+      return 50;
+    }
+    return Math.round((left / (left + right)) * 100);
+  };
+  const baseDimensions: MbtiDimension[] = [
+    {
+      key: "EI",
+      leftLetter: "E",
+      rightLetter: "I",
+      leftScore: score(["people", "relationship", "express", "close", "feedback"], ["alone", "solitude", "private", "space", "inside"]),
+      chosenLetter: "E",
+      rationale: ["Local fallback estimated this from social-energy and privacy language in the answers."]
+    },
+    {
+      key: "SN",
+      leftLetter: "S",
+      rightLetter: "N",
+      leftScore: score(["specific", "concrete", "recent", "detail", "practical"], ["pattern", "meaning", "theme", "future", "abstract"]),
+      chosenLetter: "S",
+      rationale: ["Local fallback estimated this from concrete-detail language versus pattern and meaning language."]
+    },
+    {
+      key: "TF",
+      leftLetter: "T",
+      rightLetter: "F",
+      leftScore: score(["logic", "efficient", "competence", "truth", "standards"], ["emotion", "hurt", "relationship", "empathy", "harmony"]),
+      chosenLetter: "T",
+      rationale: ["Local fallback estimated this from logic, standards, emotion, and relationship cues."]
+    },
+    {
+      key: "JP",
+      leftLetter: "J",
+      rightLetter: "P",
+      leftScore: score(["control", "plan", "decision", "goal", "discipline"], ["freedom", "flexible", "discover", "open", "change"]),
+      chosenLetter: "J",
+      rationale: ["Local fallback estimated this from planning and control language versus flexibility and openness language."]
+    }
+  ];
+  const dimensions: MbtiDimension[] = baseDimensions.map((dimension): MbtiDimension => ({
+    ...dimension,
+    chosenLetter: dimension.leftScore >= 50 ? dimension.leftLetter : dimension.rightLetter
+  }));
+
+  return {
+    type: dimensions.map((dimension) => dimension.chosenLetter).join(""),
+    confidence: "low",
+    summary: "This is a local fallback MBTI-style estimate. Treat it as a rough self-reflection lens, not a stable type.",
+    dimensions
+  };
+};
+
+const mbtiMarkdown = (assessment: MbtiAssessment | null) => {
+  if (!assessment) {
+    return "";
+  }
+  const lines = [
+    "## MBTI-style Assessment",
+    `Result: ${assessment.type}`,
+    `Confidence: ${assessment.confidence}`,
+    assessment.summary,
+    "",
+    ...assessment.dimensions.flatMap((dimension) => [
+      `### ${dimension.leftLetter}/${dimension.rightLetter}`,
+      `${dimension.leftLetter}: ${dimension.leftScore}% | ${dimension.rightLetter}: ${100 - dimension.leftScore}%`,
+      `Selected: ${dimension.chosenLetter}`,
+      ...dimension.rationale.map((item) => `- ${item}`),
+      ""
+    ])
+  ];
+  return lines.join("\n");
+};
+
 const localRephraseQuestion = (question: string, kind: QuestionKind) => {
   if (kind === "rating") {
     return `On the same 1 to 10 scale, where 1 means very low and 10 means very high: ${question.replace(/^From 1 to 10,\s*/i, "")}`;
@@ -253,6 +375,7 @@ export default function App() {
   const [error, setError] = useState("");
   const [questionVariants, setQuestionVariants] = useState<Record<string, string>>({});
   const [rephrasingKey, setRephrasingKey] = useState("");
+  const [resultPage, setResultPage] = useState<"portrait" | "mbti">("portrait");
 
   const currentModule = GUIDE_MODULES[session.moduleIndex];
   const provider = getProvider(config.providerId);
@@ -485,16 +608,32 @@ export default function App() {
   const generateReport = async () => {
     setBusy(true);
     setError("");
+    const errors: string[] = [];
+    let finalReport = "";
+    let mbtiAssessment: MbtiAssessment | null = null;
     try {
       const report = await generateFinalReport(config, { answers: session.answers, analyses: session.analyses });
-      setSession((previous) => ({ ...previous, finalReport: report.trim() }));
+      finalReport = ensureReportDisclaimer(report);
     } catch (reportError) {
       const detail = reportError instanceof Error ? reportError.message : "unknown error";
-      setError(`Model report failed, so the app generated a local draft. Detail: ${detail}`);
-      setSession((previous) => ({ ...previous, finalReport: localFinalReport(previous) }));
+      errors.push(`Model report failed, so the app generated a local draft. Detail: ${detail}`);
+      finalReport = localFinalReport(session);
+    }
+
+    try {
+      const assessment = await generateMbtiAssessment(config, { answers: session.answers, analyses: session.analyses });
+      mbtiAssessment = normalizeMbtiAssessment(assessment);
+    } catch (mbtiError) {
+      const detail = mbtiError instanceof Error ? mbtiError.message : "unknown error";
+      errors.push(`MBTI assessment used a local fallback. Detail: ${detail}`);
+      mbtiAssessment = normalizeMbtiAssessment(localMbtiAssessment(session));
     } finally {
       setBusy(false);
     }
+
+    setSession((previous) => ({ ...previous, finalReport, mbtiAssessment }));
+    setResultPage("portrait");
+    setError(errors.join("\n"));
   };
 
   const copyReport = async () => {
@@ -503,7 +642,7 @@ export default function App() {
     }
     setError("");
     try {
-      await Clipboard.setStringAsync(session.finalReport);
+      await Clipboard.setStringAsync(`${session.finalReport}\n\n${mbtiMarkdown(session.mbtiAssessment)}`.trim());
       Alert.alert("Copied", "Markdown report copied to clipboard.");
     } catch (copyError) {
       const detail = copyError instanceof Error ? copyError.message : "unknown error";
@@ -677,15 +816,41 @@ export default function App() {
             </FeedbackButton>
           ) : (
             <>
-              <View style={styles.reportBox}>
-                <Text style={styles.reportText}>{session.finalReport}</Text>
+              <View style={styles.disclaimerBox}>
+                <Text style={styles.disclaimerText}>{REPORT_DISCLAIMER}</Text>
               </View>
+              <View style={styles.tabRow}>
+                <FeedbackButton
+                  style={[styles.tabButton, resultPage === "portrait" && styles.tabButtonActive]}
+                  textStyle={[styles.tabButtonText, resultPage === "portrait" && styles.tabButtonTextActive]}
+                  onPress={() => setResultPage("portrait")}
+                >
+                  SUMMARY
+                </FeedbackButton>
+                <FeedbackButton
+                  style={[styles.tabButton, resultPage === "mbti" && styles.tabButtonActive]}
+                  textStyle={[styles.tabButtonText, resultPage === "mbti" && styles.tabButtonTextActive]}
+                  onPress={() => setResultPage("mbti")}
+                >
+                  MBTI
+                </FeedbackButton>
+              </View>
+              {resultPage === "portrait" ? (
+                <View style={styles.reportBox}>
+                  <Text style={styles.reportText}>{session.finalReport}</Text>
+                </View>
+              ) : (
+                <MbtiResult assessment={session.mbtiAssessment} />
+              )}
               <FeedbackButton
                 style={styles.secondaryButton}
                 textStyle={styles.secondaryButtonText}
                 onPress={copyReport}
               >
                 COPY MARKDOWN
+              </FeedbackButton>
+              <FeedbackButton style={styles.secondaryButton} textStyle={styles.secondaryButtonText} onPress={generateReport} disabled={busy}>
+                REGENERATE RESULTS
               </FeedbackButton>
             </>
           )}
@@ -1012,6 +1177,50 @@ function YesNoQuestion({
   );
 }
 
+function MbtiResult({ assessment }: { assessment: MbtiAssessment | null }) {
+  if (!assessment) {
+    return (
+      <View style={styles.reportBox}>
+        <Text style={styles.reportText}>MBTI assessment has not been generated yet.</Text>
+      </View>
+    );
+  }
+  return (
+    <View style={styles.mbtiBox}>
+      <Text style={styles.mbtiType}>{assessment.type}</Text>
+      <Text style={styles.bodyText}>Confidence: {assessment.confidence}</Text>
+      <Text style={styles.bodyText}>{assessment.summary}</Text>
+      {assessment.dimensions.map((dimension) => (
+        <View key={dimension.key} style={styles.dimensionBox}>
+          <View style={styles.dimensionHeader}>
+            <Text style={styles.dimensionTitle}>
+              {dimension.leftLetter}/{dimension.rightLetter}
+            </Text>
+            <Text style={styles.dimensionChoice}>Leans {dimension.chosenLetter}</Text>
+          </View>
+          <View style={styles.barLabels}>
+            <Text style={styles.barLabel}>
+              {dimension.leftLetter} {dimension.leftScore}%
+            </Text>
+            <Text style={styles.barLabel}>
+              {dimension.rightLetter} {100 - dimension.leftScore}%
+            </Text>
+          </View>
+          <View style={styles.mbtiBar}>
+            <View style={[styles.mbtiBarLeftFill, { width: `${dimension.leftScore}%` }]} />
+            <View style={[styles.mbtiBarMarker, { left: `${dimension.leftScore}%` }]} />
+          </View>
+          {dimension.rationale.map((reason, index) => (
+            <Text key={`${dimension.key}-${index}`} style={styles.reasonText}>
+              * {reason}
+            </Text>
+          ))}
+        </View>
+      ))}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
@@ -1242,6 +1451,45 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "900"
   },
+  disclaimerBox: {
+    borderWidth: 1,
+    borderColor: "#A64038",
+    borderRadius: 8,
+    backgroundColor: "#FFF2F0",
+    padding: 12
+  },
+  disclaimerText: {
+    color: "#8A2F28",
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: "900"
+  },
+  tabRow: {
+    flexDirection: "row",
+    borderWidth: 1,
+    borderColor: "#C9CEC4",
+    borderRadius: 8,
+    overflow: "hidden",
+    backgroundColor: "#FFFFFF"
+  },
+  tabButton: {
+    minHeight: 46,
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FFFFFF"
+  },
+  tabButtonActive: {
+    backgroundColor: "#1D4F43"
+  },
+  tabButtonText: {
+    color: "#3C473F",
+    fontSize: 13,
+    fontWeight: "900"
+  },
+  tabButtonTextActive: {
+    color: "#FFFFFF"
+  },
   signalRow: {
     minHeight: 116,
     flexDirection: "row",
@@ -1328,6 +1576,77 @@ const styles = StyleSheet.create({
     color: "#17201B",
     fontSize: 15,
     lineHeight: 22
+  },
+  mbtiBox: {
+    borderWidth: 1,
+    borderColor: "#D9DDD4",
+    borderRadius: 8,
+    backgroundColor: "#FFFFFF",
+    padding: 14,
+    gap: 14
+  },
+  mbtiType: {
+    color: "#17201B",
+    fontSize: 46,
+    lineHeight: 52,
+    fontWeight: "900"
+  },
+  dimensionBox: {
+    gap: 8,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: "#E2E5DE"
+  },
+  dimensionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10
+  },
+  dimensionTitle: {
+    color: "#17201B",
+    fontSize: 18,
+    fontWeight: "900"
+  },
+  dimensionChoice: {
+    color: "#866A28",
+    fontSize: 13,
+    fontWeight: "900"
+  },
+  barLabels: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 10
+  },
+  barLabel: {
+    color: "#4D5851",
+    fontSize: 13,
+    fontWeight: "800"
+  },
+  mbtiBar: {
+    height: 18,
+    borderRadius: 8,
+    overflow: "hidden",
+    backgroundColor: "#DCE9EE",
+    borderWidth: 1,
+    borderColor: "#C8D7DC"
+  },
+  mbtiBarLeftFill: {
+    height: "100%",
+    backgroundColor: "#D88C4B"
+  },
+  mbtiBarMarker: {
+    position: "absolute",
+    top: -2,
+    bottom: -2,
+    width: 4,
+    marginLeft: -2,
+    backgroundColor: "#17201B"
+  },
+  reasonText: {
+    color: "#3B443E",
+    fontSize: 14,
+    lineHeight: 20
   },
   errorText: {
     color: "#9B2C22",

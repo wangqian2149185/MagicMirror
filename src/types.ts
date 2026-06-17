@@ -56,6 +56,22 @@ export type ModuleAnalysis = {
   correction?: string;
 };
 
+export type MbtiDimension = {
+  key: "EI" | "SN" | "TF" | "JP";
+  leftLetter: "E" | "S" | "T" | "J";
+  rightLetter: "I" | "N" | "F" | "P";
+  leftScore: number;
+  chosenLetter: string;
+  rationale: string[];
+};
+
+export type MbtiAssessment = {
+  type: string;
+  confidence: "low" | "medium" | "high";
+  summary: string;
+  dimensions: MbtiDimension[];
+};
+
 export type SessionState = {
   moduleIndex: number;
   phase: "open" | "rating" | "analyzing" | "validate" | "calibrate" | "complete";
@@ -65,6 +81,7 @@ export type SessionState = {
   answers: Answer[];
   analyses: ModuleAnalysis[];
   finalReport: string;
+  mbtiAssessment: MbtiAssessment | null;
 };
 
 export type ChatMessage = {

@@ -1,4 +1,4 @@
-import { AppConfig, ChatMessage, ModuleAnalysis } from "../types";
+import { AppConfig, ChatMessage, MbtiAssessment, ModuleAnalysis } from "../types";
 import { getProvider } from "../data/providers";
 
 const compactJson = (value: unknown) => JSON.stringify(value, null, 2);
@@ -206,6 +206,8 @@ export const generateFinalReport = async (
   }
 ) => {
   const prompt = `Create the final report as Markdown using this exact structure:
+***Reference only. This result is for self-reflection and the app is not responsible for decisions, outcomes, or interpretations based on it.***
+
 # Personality Portrait
 ## Core Summary
 ## Main Drivers
@@ -225,6 +227,7 @@ export const generateFinalReport = async (
 Rules:
 - Do not diagnose.
 - Do not assign a fixed type.
+- Keep the reference-only disclaimer as the first visible line, surrounded by ***.
 - Use phrases like "appears to", "may", "one possible pattern".
 - Link claims to evidence.
 - Include uncertainty and missing information.
@@ -237,4 +240,67 @@ All answers: ${compactJson(args.answers)}`;
     { role: "system", content: systemPrompt },
     { role: "user", content: prompt }
   ]);
+};
+
+export const generateMbtiAssessment = async (
+  config: AppConfig,
+  args: {
+    answers: unknown[];
+    analyses: unknown[];
+  }
+): Promise<MbtiAssessment> => {
+  const prompt = `Estimate an MBTI-style preference profile from this interview evidence.
+
+Important:
+- MBTI here is only a lightweight self-reflection lens, not a diagnosis or fixed identity.
+- Use evidence-linked, cautious language.
+- Give a percentage from 0 to 100 for the left-side letter in each pair:
+  EI uses E on the left and I on the right.
+  SN uses S on the left and N on the right.
+  TF uses T on the left and F on the right.
+  JP uses J on the left and P on the right.
+- Example: if the user is 40% E and 60% I, set EI leftScore to 40 and chosenLetter to "I".
+
+Return only JSON with this exact shape:
+{
+  "type": "INTJ",
+  "confidence": "low|medium|high",
+  "summary": "2-3 cautious sentences",
+  "dimensions": [
+    {"key":"EI","leftLetter":"E","rightLetter":"I","leftScore":40,"chosenLetter":"I","rationale":["evidence reason"]},
+    {"key":"SN","leftLetter":"S","rightLetter":"N","leftScore":45,"chosenLetter":"N","rationale":["evidence reason"]},
+    {"key":"TF","leftLetter":"T","rightLetter":"F","leftScore":70,"chosenLetter":"T","rationale":["evidence reason"]},
+    {"key":"JP","leftLetter":"J","rightLetter":"P","leftScore":65,"chosenLetter":"J","rationale":["evidence reason"]}
+  ]
+}
+
+Module analyses: ${compactJson(args.analyses)}
+All answers: ${compactJson(args.answers)}`;
+
+  const raw = await callModel(config, [
+    { role: "system", content: systemPrompt },
+    { role: "user", content: prompt }
+  ]);
+  const parsed = extractJson(raw);
+  const dimensions = Array.isArray(parsed.dimensions) ? parsed.dimensions : [];
+  return {
+    type: String(parsed.type ?? "UNKN").slice(0, 4).toUpperCase(),
+    confidence: ["low", "medium", "high"].includes(parsed.confidence) ? parsed.confidence : "low",
+    summary: String(parsed.summary ?? ""),
+    dimensions: dimensions.map((dimension: {
+      key?: "EI" | "SN" | "TF" | "JP";
+      leftLetter?: "E" | "S" | "T" | "J";
+      rightLetter?: "I" | "N" | "F" | "P";
+      leftScore?: number;
+      chosenLetter?: string;
+      rationale?: string[];
+    }) => ({
+      key: dimension.key ?? "EI",
+      leftLetter: dimension.leftLetter ?? "E",
+      rightLetter: dimension.rightLetter ?? "I",
+      leftScore: Math.max(0, Math.min(100, Number(dimension.leftScore ?? 50))),
+      chosenLetter: String(dimension.chosenLetter ?? ""),
+      rationale: Array.isArray(dimension.rationale) ? dimension.rationale.map(String).slice(0, 3) : []
+    }))
+  };
 };
