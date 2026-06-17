@@ -34,4 +34,4 @@ You can clear answers and generated reports inside the app. You can also delete 
 
 ## Contact
 
-For privacy questions, contact the app developer through the support contact listed on the App Store product page.
+For privacy questions, contact the app developer at wangqian2149185@yahoo.com.

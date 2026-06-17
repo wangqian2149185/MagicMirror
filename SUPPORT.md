@@ -1,6 +1,6 @@
 # MagicMirror Support
 
-For help with MagicMirror, contact the app developer through the support contact listed on the App Store product page.
+For help with MagicMirror, contact the developer at wangqian2149185@yahoo.com.
 
 ## Common Notes
 
