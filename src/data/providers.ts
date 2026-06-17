@@ -15,7 +15,7 @@ export const PROVIDERS: ProviderConfig[] = [
     kind: "anthropic",
     baseUrl: "https://api.anthropic.com",
     needsApiKey: true,
-    models: ["claude-opus-4-1", "claude-sonnet-4-5", "claude-sonnet-4-0", "claude-3-7-sonnet-latest"]
+    models: ["claude-sonnet-4-6", "claude-opus-4-1", "claude-sonnet-4-5", "claude-sonnet-4-0", "claude-3-7-sonnet-latest"]
   },
   {
     id: "gemini",

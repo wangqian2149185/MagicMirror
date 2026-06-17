@@ -28,9 +28,133 @@ import { Answer, AppConfig, MbtiAssessment, MbtiDimension, ModuleAnalysis, Quest
 
 const CONFIG_KEY = "portrait-app-config";
 const SESSION_KEY = "portrait-app-session";
+const LANGUAGE_KEY = "portrait-app-language";
 const REPORT_DISCLAIMER =
   "***Reference only. This result is for self-reflection and the app is not responsible for decisions, outcomes, or interpretations based on it.***";
 const RADAR_SIZE = 250;
+
+type AppLanguage = "en" | "zh";
+
+const COPY = {
+  en: {
+    languageButton: "中文",
+    safetyBoundary: SAFETY_BOUNDARY,
+    apiCompany: "API company",
+    model: "Model",
+    customModel: "Custom model override",
+    optionalModel: "Optional exact model id",
+    apiKey: "API key",
+    required: "Required",
+    optional: "Optional",
+    baseUrl: "Base URL",
+    apiNotice: "API keys stay in local device storage for this prototype. For a public app, use a backend proxy instead.",
+    costNotice: "Cost reference: if you use claude-sonnet-4-6 for a complete run, expect roughly $0.50 in API usage. Actual cost depends on answer length and provider pricing.",
+    startInterview: "START INTERVIEW",
+    complete: "Complete",
+    finalResults: "Final Results",
+    finalIntro: "The report is evidence-linked and intentionally non-diagnostic. You can copy it as Markdown.",
+    generateReport: "GENERATE REPORT",
+    summary: "SUMMARY",
+    mbti: "MBTI",
+    polygon: "POLYGON",
+    copyMarkdown: "COPY MARKDOWN",
+    regenerateResults: "REGENERATE RESULTS",
+    portraitInterview: "Portrait Interview",
+    privatePrototype: "Private prototype",
+    apiSetup: "API SETUP",
+    reset: "RESET",
+    summarizeTitle: "Summarize and predict",
+    summarizeBody: "The app will summarize this section, predict the YES/NO calibration answers, then check whether those predictions align with you at 80% or better.",
+    trainSection: "TRAIN THIS SECTION",
+    currentSummary: "Current section summary",
+    predictionAgreement: "Prediction agreement",
+    openQuestion: "Open question",
+    scoringQuestion: "Scoring question",
+    calibration: "Calibration",
+    rephrase: "RE-PHRASE",
+    rephrasing: "RE-PHRASING...",
+    voiceInput: "VOICE INPUT",
+    stopVoice: "STOP VOICE",
+    next: "NEXT",
+    saveContinue: "SAVE AND CONTINUE",
+    answerPlaceholder: "Type your answer, or use voice input.",
+    summaryPolygon: "Summary Polygon",
+    polygonHelp: "The overview chart has one vertex per summary section. Each section chart uses bold sub-items first, then bullet items when bold sub-items are not present.",
+    overallSections: "Overall sections",
+    copiedTitle: "Copied",
+    copiedBody: "Markdown report copied to clipboard.",
+    resetTitle: "Reset interview?",
+    resetBody: "This clears all answers and generated reports on this device.",
+    cancel: "Cancel",
+    answerNeededTitle: "Answer needed",
+    answerNeededBody: "Please type or speak an answer before continuing.",
+    correctionNeededTitle: "Correction needed",
+    correctionNeededBody: "Please add what the app misunderstood before moving on.",
+    permissionTitle: "Permission needed",
+    permissionBody: "Microphone and speech-recognition permission are needed for voice input.",
+    appTitle: "MagicMirror"
+  },
+  zh: {
+    languageButton: "EN",
+    safetyBoundary: "本应用仅用于自我反思，不用于诊断、分类，也不能替代可信任的人、紧急服务或持证专业人士的支持。",
+    apiCompany: "API 公司",
+    model: "模型",
+    customModel: "自定义模型覆盖",
+    optionalModel: "可选，填写精确模型 ID",
+    apiKey: "API key",
+    required: "必填",
+    optional: "可选",
+    baseUrl: "Base URL",
+    apiNotice: "此原型会把 API key 保存在本机设备存储中。正式公开发布时应使用后端代理。",
+    costNotice: "费用参考：如果使用 claude-sonnet-4-6 跑完整流程，大约消耗 $0.50 API 费用。实际费用会随回答长度和供应商价格变化。",
+    startInterview: "开始访谈",
+    complete: "完成",
+    finalResults: "最终结果",
+    finalIntro: "报告会尽量基于证据，并且不是诊断。你可以复制为 Markdown。",
+    generateReport: "生成报告",
+    summary: "总结",
+    mbti: "MBTI",
+    polygon: "多边形",
+    copyMarkdown: "复制 Markdown",
+    regenerateResults: "重新生成结果",
+    portraitInterview: "画像访谈",
+    privatePrototype: "本机原型",
+    apiSetup: "API 设置",
+    reset: "重置",
+    summarizeTitle: "总结并预测",
+    summarizeBody: "应用会总结本节，预测 YES/NO 校准答案，然后检查预测与你的回答是否达到 80% 或以上一致。",
+    trainSection: "训练本节",
+    currentSummary: "当前章节总结",
+    predictionAgreement: "预测一致率",
+    openQuestion: "开放题",
+    scoringQuestion: "评分题",
+    calibration: "校准",
+    rephrase: "换个问法",
+    rephrasing: "改写中...",
+    voiceInput: "语音输入",
+    stopVoice: "停止语音",
+    next: "下一步",
+    saveContinue: "保存并继续",
+    answerPlaceholder: "输入你的回答，或使用语音输入。",
+    summaryPolygon: "总结多边形",
+    polygonHelp: "总图的顶点对应 summary 里的每个章节。每个章节图优先使用粗体 sub-item；如果没有粗体 sub-item，则使用 bullet 条目。",
+    overallSections: "总览章节",
+    copiedTitle: "已复制",
+    copiedBody: "Markdown 报告已复制到剪贴板。",
+    resetTitle: "重置访谈？",
+    resetBody: "这会清除本设备上的所有回答和生成报告。",
+    cancel: "取消",
+    answerNeededTitle: "需要回答",
+    answerNeededBody: "继续前请先输入或语音回答。",
+    correctionNeededTitle: "需要校正",
+    correctionNeededBody: "请补充应用误解了什么，再继续下一节。",
+    permissionTitle: "需要权限",
+    permissionBody: "语音输入需要麦克风和语音识别权限。",
+    appTitle: "MagicMirror"
+  }
+};
+
+type CopyText = { [K in keyof typeof COPY.en]: string };
 
 type PolygonItem = {
   label: string;
@@ -473,9 +597,11 @@ export default function App() {
   const [questionVariants, setQuestionVariants] = useState<Record<string, string>>({});
   const [rephrasingKey, setRephrasingKey] = useState("");
   const [resultPage, setResultPage] = useState<"portrait" | "mbti" | "polygon">("portrait");
+  const [language, setLanguage] = useState<AppLanguage>("en");
 
   const currentModule = GUIDE_MODULES[session.moduleIndex];
   const provider = getProvider(config.providerId);
+  const text: CopyText = COPY[language];
   const openQuestions = useMemo(() => openQuestionsFor(session.moduleIndex), [session.moduleIndex]);
   const ratingQuestions = useMemo(() => ratingQuestionsFor(session.moduleIndex), [session.moduleIndex]);
   const yesNoQuestions = useMemo(() => yesNoQuestionsFor(session.moduleIndex), [session.moduleIndex]);
@@ -484,9 +610,10 @@ export default function App() {
   useEffect(() => {
     const load = async () => {
       try {
-        const [savedConfig, savedSession] = await Promise.all([
+        const [savedConfig, savedSession, savedLanguage] = await Promise.all([
           AsyncStorage.getItem(CONFIG_KEY),
-          AsyncStorage.getItem(SESSION_KEY)
+          AsyncStorage.getItem(SESSION_KEY),
+          AsyncStorage.getItem(LANGUAGE_KEY)
         ]);
         if (savedConfig) {
           setConfig({ ...defaultConfig, ...JSON.parse(savedConfig) });
@@ -494,6 +621,9 @@ export default function App() {
         }
         if (savedSession) {
           setSession({ ...defaultSession, ...JSON.parse(savedSession) });
+        }
+        if (savedLanguage === "en" || savedLanguage === "zh") {
+          setLanguage(savedLanguage);
         }
       } finally {
         setIsReady(true);
@@ -528,6 +658,12 @@ export default function App() {
   }, [isReady, session]);
 
   useEffect(() => {
+    if (isReady) {
+      AsyncStorage.setItem(LANGUAGE_KEY, language).catch(() => undefined);
+    }
+  }, [isReady, language]);
+
+  useEffect(() => {
     setDraft("");
   }, [session.moduleIndex, session.phase, session.openIndex]);
 
@@ -537,6 +673,10 @@ export default function App() {
       return;
     }
     setIsConfigured(true);
+  };
+
+  const toggleLanguage = () => {
+    setLanguage((previous) => (previous === "en" ? "zh" : "en"));
   };
 
   const changeProvider = (providerId: string) => {
@@ -568,7 +708,7 @@ export default function App() {
   const answerOpen = () => {
     const question = openQuestions[session.openIndex];
     if (!question || !draft.trim()) {
-      Alert.alert("Answer needed", "Please type or speak an answer before continuing.");
+      Alert.alert(text.answerNeededTitle, text.answerNeededBody);
       return;
     }
     addAnswer("open", session.openIndex, question, draft.trim());
@@ -685,7 +825,7 @@ export default function App() {
 
   const saveCalibration = () => {
     if (!currentModule || !draft.trim()) {
-      Alert.alert("Correction needed", "Please add what the app misunderstood before moving on.");
+      Alert.alert(text.correctionNeededTitle, text.correctionNeededBody);
       return;
     }
     const correction = draft.trim();
@@ -740,7 +880,7 @@ export default function App() {
     setError("");
     try {
       await Clipboard.setStringAsync(`${session.finalReport}\n\n${mbtiMarkdown(session.mbtiAssessment)}`.trim());
-      Alert.alert("Copied", "Markdown report copied to clipboard.");
+      Alert.alert(text.copiedTitle, text.copiedBody);
     } catch (copyError) {
       const detail = copyError instanceof Error ? copyError.message : "unknown error";
       setError(`Copy failed. Detail: ${detail}`);
@@ -748,10 +888,10 @@ export default function App() {
   };
 
   const resetInterview = () => {
-    Alert.alert("Reset interview?", "This clears all answers and generated reports on this device.", [
-      { text: "Cancel", style: "cancel" },
+    Alert.alert(text.resetTitle, text.resetBody, [
+      { text: text.cancel, style: "cancel" },
       {
-        text: "Reset",
+        text: text.reset,
         style: "destructive",
         onPress: () => {
           setSession(defaultSession);
@@ -767,7 +907,7 @@ export default function App() {
     try {
       const permissions = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
       if (!permissions.granted) {
-        Alert.alert("Permission needed", "Microphone and speech-recognition permission are needed for voice input.");
+        Alert.alert(text.permissionTitle, text.permissionBody);
         return;
       }
       ExpoSpeechRecognitionModule.start({
@@ -834,9 +974,14 @@ export default function App() {
       <SafeAreaView style={styles.screen}>
         <StatusBar style="dark" />
         <ScrollView contentContainerStyle={styles.setup}>
-          <Text style={styles.appTitle}>Personality Portrait</Text>
-          <Text style={styles.bodyText}>{SAFETY_BOUNDARY}</Text>
-          <Text style={styles.label}>API company</Text>
+          <View style={styles.setupHeader}>
+            <Text style={styles.appTitle}>{text.appTitle}</Text>
+            <FeedbackButton style={styles.languageButton} textStyle={styles.languageButtonText} onPress={toggleLanguage}>
+              {text.languageButton}
+            </FeedbackButton>
+          </View>
+          <Text style={styles.bodyText}>{text.safetyBoundary}</Text>
+          <Text style={styles.label}>{text.apiCompany}</Text>
           <View style={styles.pickerFrame}>
             <Picker selectedValue={config.providerId} onValueChange={changeProvider}>
               {PROVIDERS.map((item) => (
@@ -845,7 +990,7 @@ export default function App() {
             </Picker>
           </View>
 
-          <Text style={styles.label}>Model</Text>
+          <Text style={styles.label}>{text.model}</Text>
           <View style={styles.pickerFrame}>
             <Picker selectedValue={config.model} onValueChange={(model) => setConfig((previous) => ({ ...previous, model }))}>
               {provider.models.map((model) => (
@@ -854,26 +999,26 @@ export default function App() {
             </Picker>
           </View>
 
-          <Text style={styles.label}>Custom model override</Text>
+          <Text style={styles.label}>{text.customModel}</Text>
           <TextInput
             style={styles.input}
             value={config.customModel}
             onChangeText={(customModel) => setConfig((previous) => ({ ...previous, customModel }))}
-            placeholder="Optional exact model id"
+            placeholder={text.optionalModel}
             autoCapitalize="none"
           />
 
-          <Text style={styles.label}>API key</Text>
+          <Text style={styles.label}>{text.apiKey}</Text>
           <TextInput
             style={styles.input}
             value={config.apiKey}
             onChangeText={(apiKey) => setConfig((previous) => ({ ...previous, apiKey }))}
-            placeholder={provider.needsApiKey ? "Required" : "Optional"}
+            placeholder={provider.needsApiKey ? text.required : text.optional}
             secureTextEntry
             autoCapitalize="none"
           />
 
-          <Text style={styles.label}>Base URL</Text>
+          <Text style={styles.label}>{text.baseUrl}</Text>
           <TextInput
             style={styles.input}
             value={config.baseUrl}
@@ -883,12 +1028,16 @@ export default function App() {
 
           <View style={styles.notice}>
             <Text style={styles.noticeText}>
-              API keys stay in local device storage for this prototype. For a public app, use a backend proxy instead.
+              {text.apiNotice}
             </Text>
           </View>
 
+          <View style={styles.costNotice}>
+            <Text style={styles.costNoticeText}>{text.costNotice}</Text>
+          </View>
+
           <FeedbackButton style={styles.primaryButton} onPress={saveConfig} textStyle={styles.primaryButtonText}>
-            START INTERVIEW
+            {text.startInterview}
           </FeedbackButton>
         </ScrollView>
       </SafeAreaView>
@@ -900,16 +1049,16 @@ export default function App() {
       <SafeAreaView style={styles.screen}>
         <StatusBar style="dark" />
         <ScrollView contentContainerStyle={styles.content}>
-          <Header onReset={resetInterview} onEditConfig={editApiSettings} />
-          <Text style={styles.sectionEyebrow}>Complete</Text>
-          <Text style={styles.title}>Final Results</Text>
+          <Header onReset={resetInterview} onEditConfig={editApiSettings} onToggleLanguage={toggleLanguage} text={text} />
+          <Text style={styles.sectionEyebrow}>{text.complete}</Text>
+          <Text style={styles.title}>{text.finalResults}</Text>
           <Text style={styles.bodyText}>
-            The report is evidence-linked and intentionally non-diagnostic. You can copy it as Markdown.
+            {text.finalIntro}
           </Text>
           {busy ? <ActivityIndicator size="large" /> : null}
           {!session.finalReport ? (
             <FeedbackButton style={styles.primaryButton} onPress={generateReport} disabled={busy} textStyle={styles.primaryButtonText}>
-              GENERATE REPORT
+              {text.generateReport}
             </FeedbackButton>
           ) : (
             <>
@@ -922,21 +1071,21 @@ export default function App() {
                   textStyle={[styles.tabButtonText, resultPage === "portrait" && styles.tabButtonTextActive]}
                   onPress={() => setResultPage("portrait")}
                 >
-                  SUMMARY
+                  {text.summary}
                 </FeedbackButton>
                 <FeedbackButton
                   style={[styles.tabButton, resultPage === "mbti" && styles.tabButtonActive]}
                   textStyle={[styles.tabButtonText, resultPage === "mbti" && styles.tabButtonTextActive]}
                   onPress={() => setResultPage("mbti")}
                 >
-                  MBTI
+                  {text.mbti}
                 </FeedbackButton>
                 <FeedbackButton
                   style={[styles.tabButton, resultPage === "polygon" && styles.tabButtonActive]}
                   textStyle={[styles.tabButtonText, resultPage === "polygon" && styles.tabButtonTextActive]}
                   onPress={() => setResultPage("polygon")}
                 >
-                  POLYGON
+                  {text.polygon}
                 </FeedbackButton>
               </View>
               {resultPage === "portrait" ? (
@@ -946,17 +1095,17 @@ export default function App() {
               ) : resultPage === "mbti" ? (
                 <MbtiResult assessment={session.mbtiAssessment} />
               ) : (
-                <PolygonResult sections={parsePolygonSections(session.finalReport)} />
+                <PolygonResult sections={parsePolygonSections(session.finalReport)} text={text} />
               )}
               <FeedbackButton
                 style={styles.secondaryButton}
                 textStyle={styles.secondaryButtonText}
                 onPress={copyReport}
               >
-                COPY MARKDOWN
+                {text.copyMarkdown}
               </FeedbackButton>
               <FeedbackButton style={styles.secondaryButton} textStyle={styles.secondaryButtonText} onPress={generateReport} disabled={busy}>
-                REGENERATE RESULTS
+                {text.regenerateResults}
               </FeedbackButton>
             </>
           )}
@@ -985,7 +1134,7 @@ export default function App() {
       <StatusBar style="dark" />
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.flex}>
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-          <Header onReset={resetInterview} onEditConfig={editApiSettings} />
+          <Header onReset={resetInterview} onEditConfig={editApiSettings} onToggleLanguage={toggleLanguage} text={text} />
           <Text style={styles.sectionEyebrow}>
             Section {session.moduleIndex + 1} of {GUIDE_MODULES.length}
           </Text>
@@ -1005,6 +1154,7 @@ export default function App() {
               onNext={answerOpen}
               onRephrase={() => handleRephrase(openQuestionKey, openQuestion, "open")}
               rephraseBusy={rephrasingKey === openQuestionKey}
+              text={text}
             />
           ) : null}
 
@@ -1016,19 +1166,19 @@ export default function App() {
               onAnswer={answerRating}
               onRephrase={() => handleRephrase(ratingQuestionKey, ratingQuestion, "rating")}
               rephraseBusy={rephrasingKey === ratingQuestionKey}
+              text={text}
             />
           ) : null}
 
           {session.phase === "analyzing" ? (
             <View style={styles.panel}>
-              <Text style={styles.panelTitle}>Summarize and predict</Text>
+              <Text style={styles.panelTitle}>{text.summarizeTitle}</Text>
               <Text style={styles.bodyText}>
-                The app will summarize this section, predict the YES/NO calibration answers, then check whether those
-                predictions align with you at 80% or better.
+                {text.summarizeBody}
               </Text>
               {busy ? <ActivityIndicator size="large" /> : null}
               <FeedbackButton style={styles.primaryButton} onPress={runModuleAnalysis} disabled={busy} textStyle={styles.primaryButtonText}>
-                TRAIN THIS SECTION
+                {text.trainSection}
               </FeedbackButton>
             </View>
           ) : null}
@@ -1041,6 +1191,7 @@ export default function App() {
               onAnswer={answerYesNo}
               onRephrase={() => handleRephrase(yesNoQuestionKey, yesNoQuestion, "yesno")}
               rephraseBusy={rephrasingKey === yesNoQuestionKey}
+              text={text}
             />
           ) : null}
 
@@ -1057,16 +1208,17 @@ export default function App() {
               onNext={saveCalibration}
               onRephrase={() => handleRephrase(calibrationQuestionKey, calibrationQuestion, "open")}
               rephraseBusy={rephrasingKey === calibrationQuestionKey}
-              buttonText="SAVE AND CONTINUE"
+              text={text}
+              buttonText={text.saveContinue}
             />
           ) : null}
 
           {currentAnalysis && session.phase !== "validate" ? (
             <View style={styles.analysisBox}>
-              <Text style={styles.panelTitle}>Current section summary</Text>
+              <Text style={styles.panelTitle}>{text.currentSummary}</Text>
               <Text style={styles.bodyText}>{currentAnalysis.summary}</Text>
               {typeof currentAnalysis.agreement === "number" ? (
-                <Text style={styles.bodyText}>Prediction agreement: {Math.round(currentAnalysis.agreement * 100)}%</Text>
+                <Text style={styles.bodyText}>{text.predictionAgreement}: {Math.round(currentAnalysis.agreement * 100)}%</Text>
               ) : null}
             </View>
           ) : null}
@@ -1111,19 +1263,32 @@ function FeedbackButton({
   );
 }
 
-function Header({ onReset, onEditConfig }: { onReset: () => void; onEditConfig: () => void }) {
+function Header({
+  onReset,
+  onEditConfig,
+  onToggleLanguage,
+  text
+}: {
+  onReset: () => void;
+  onEditConfig: () => void;
+  onToggleLanguage: () => void;
+  text: CopyText;
+}) {
   return (
     <View style={styles.header}>
       <View>
-        <Text style={styles.headerTitle}>Portrait Interview</Text>
-        <Text style={styles.headerMeta}>Private prototype</Text>
+        <Text style={styles.headerTitle}>{text.portraitInterview}</Text>
+        <Text style={styles.headerMeta}>{text.privatePrototype}</Text>
       </View>
       <View style={styles.headerActions}>
+        <FeedbackButton style={styles.resetButton} onPress={onToggleLanguage} textStyle={styles.resetButtonText}>
+          {text.languageButton}
+        </FeedbackButton>
         <FeedbackButton style={styles.resetButton} onPress={onEditConfig} textStyle={styles.resetButtonText}>
-          API SETUP
+          {text.apiSetup}
         </FeedbackButton>
         <FeedbackButton style={styles.resetButton} onPress={onReset} textStyle={styles.resetButtonText}>
-          RESET
+          {text.reset}
         </FeedbackButton>
       </View>
     </View>
@@ -1142,7 +1307,8 @@ function OpenQuestion({
   onNext,
   onRephrase,
   rephraseBusy,
-  buttonText = "NEXT"
+  text,
+  buttonText
 }: {
   question: string;
   index: number;
@@ -1155,22 +1321,23 @@ function OpenQuestion({
   onNext: () => void;
   onRephrase: () => void;
   rephraseBusy: boolean;
+  text: CopyText;
   buttonText?: string;
 }) {
   return (
     <View style={styles.panel}>
       <Text style={styles.progressLabel}>
-        Open question {index}/{total}
+        {text.openQuestion} {index}/{total}
       </Text>
       <Text style={styles.question}>{question}</Text>
       <FeedbackButton style={styles.rephraseButton} onPress={onRephrase} disabled={rephraseBusy} textStyle={styles.rephraseButtonText}>
-        {rephraseBusy ? "RE-PHRASING..." : "RE-PHRASE"}
+        {rephraseBusy ? text.rephrasing : text.rephrase}
       </FeedbackButton>
       <TextInput
         style={styles.textArea}
         value={draft}
         onChangeText={onDraft}
-        placeholder="Type your answer, or use voice input."
+        placeholder={text.answerPlaceholder}
         multiline
         textAlignVertical="top"
       />
@@ -1180,10 +1347,10 @@ function OpenQuestion({
           onPress={listening ? onStopVoice : onStartVoice}
           textStyle={styles.voiceButtonText}
         >
-          {listening ? "STOP VOICE" : "VOICE INPUT"}
+          {listening ? text.stopVoice : text.voiceInput}
         </FeedbackButton>
         <FeedbackButton style={styles.primaryButtonSmall} onPress={onNext} textStyle={styles.primaryButtonText}>
-          {buttonText}
+          {buttonText ?? text.next}
         </FeedbackButton>
       </View>
     </View>
@@ -1196,7 +1363,8 @@ function RatingQuestion({
   total,
   onAnswer,
   onRephrase,
-  rephraseBusy
+  rephraseBusy,
+  text
 }: {
   question: string;
   index: number;
@@ -1204,15 +1372,16 @@ function RatingQuestion({
   onAnswer: (value: number) => void;
   onRephrase: () => void;
   rephraseBusy: boolean;
+  text: CopyText;
 }) {
   return (
     <View style={styles.panel}>
       <Text style={styles.progressLabel}>
-        Scoring question {index}/{total}
+        {text.scoringQuestion} {index}/{total}
       </Text>
       <Text style={styles.question}>{question}</Text>
       <FeedbackButton style={styles.rephraseButton} onPress={onRephrase} disabled={rephraseBusy} textStyle={styles.rephraseButtonText}>
-        {rephraseBusy ? "RE-PHRASING..." : "RE-PHRASE"}
+        {rephraseBusy ? text.rephrasing : text.rephrase}
       </FeedbackButton>
       <View style={styles.signalRow}>
         {Array.from({ length: 10 }, (_, itemIndex) => {
@@ -1243,7 +1412,8 @@ function YesNoQuestion({
   total,
   onAnswer,
   onRephrase,
-  rephraseBusy
+  rephraseBusy,
+  text
 }: {
   question: string;
   index: number;
@@ -1251,11 +1421,12 @@ function YesNoQuestion({
   onAnswer: (value: boolean) => void;
   onRephrase: () => void;
   rephraseBusy: boolean;
+  text: CopyText;
 }) {
   return (
     <View style={styles.panel}>
       <Text style={styles.progressLabel}>
-        Calibration {index}/{total}
+        {text.calibration} {index}/{total}
       </Text>
       <Text style={styles.question}>{question}</Text>
       <View style={styles.yesNoRow}>
@@ -1277,7 +1448,7 @@ function YesNoQuestion({
         </FeedbackButton>
       </View>
       <FeedbackButton style={styles.rephraseButton} onPress={onRephrase} disabled={rephraseBusy} textStyle={styles.rephraseButtonText}>
-        {rephraseBusy ? "RE-PHRASING..." : "RE-PHRASE"}
+        {rephraseBusy ? text.rephrasing : text.rephrase}
       </FeedbackButton>
     </View>
   );
@@ -1375,20 +1546,6 @@ function RadarChart({ title, items }: { title: string; items: PolygonItem[] }) {
             ]}
           />
         ))}
-        {points.map((point, index) => (
-          <View
-            key={`spoke-${index}`}
-            style={[
-              styles.radarSpoke,
-              {
-                left: center,
-                top: center,
-                width: maxRadius,
-                transform: [{ rotate: `${(-Math.PI / 2 + (Math.PI * 2 * index) / points.length)}rad` }]
-              }
-            ]}
-          />
-        ))}
         {edges.map((edge, index) => (
           <View
             key={`edge-${index}`}
@@ -1433,7 +1590,7 @@ function RadarChart({ title, items }: { title: string; items: PolygonItem[] }) {
   );
 }
 
-function PolygonResult({ sections }: { sections: PolygonSection[] }) {
+function PolygonResult({ sections, text }: { sections: PolygonSection[]; text: CopyText }) {
   if (!sections.length) {
     return (
       <View style={styles.reportBox}>
@@ -1448,12 +1605,9 @@ function PolygonResult({ sections }: { sections: PolygonSection[] }) {
   }));
   return (
     <View style={styles.polygonBox}>
-      <Text style={styles.panelTitle}>Summary Polygon</Text>
-      <Text style={styles.bodyText}>
-        The overview chart has one vertex per summary section. Each section chart uses bold sub-items first, then
-        bullet items when bold sub-items are not present.
-      </Text>
-      <RadarChart title="Overall sections" items={overviewItems} />
+      <Text style={styles.panelTitle}>{text.summaryPolygon}</Text>
+      <Text style={styles.bodyText}>{text.polygonHelp}</Text>
+      <RadarChart title={text.overallSections} items={overviewItems} />
       {sections.map((section) => (
         <RadarChart
           key={section.title}
@@ -1486,6 +1640,13 @@ const styles = StyleSheet.create({
     padding: 22,
     gap: 12
   },
+  setupHeader: {
+    minHeight: 50,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 12
+  },
   content: {
     padding: 18,
     gap: 14
@@ -1496,15 +1657,34 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     lineHeight: 39
   },
+  languageButton: {
+    minHeight: 42,
+    borderWidth: 1,
+    borderColor: "#1D4F43",
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FFFFFF"
+  },
+  languageButtonText: {
+    color: "#1D4F43",
+    fontSize: 13,
+    fontWeight: "900"
+  },
   header: {
     minHeight: 54,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between"
+    justifyContent: "space-between",
+    gap: 10
   },
   headerActions: {
     flexDirection: "row",
-    gap: 8
+    flexWrap: "wrap",
+    justifyContent: "flex-end",
+    gap: 6,
+    flexShrink: 1
   },
   headerTitle: {
     color: "#17201B",
@@ -1588,6 +1768,19 @@ const styles = StyleSheet.create({
     color: "#5E4B13",
     fontSize: 14,
     lineHeight: 20
+  },
+  costNotice: {
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#B9D0C7",
+    backgroundColor: "#EDF6F2",
+    padding: 12
+  },
+  costNoticeText: {
+    color: "#244A3F",
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: "800"
   },
   panel: {
     borderWidth: 1,
@@ -1926,11 +2119,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#D8DED5",
     backgroundColor: "transparent"
-  },
-  radarSpoke: {
-    position: "absolute",
-    height: 1,
-    backgroundColor: "#E5E9E2"
   },
   radarEdge: {
     position: "absolute",
