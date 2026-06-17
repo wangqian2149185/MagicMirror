@@ -50,6 +50,9 @@ const COPY = {
     baseUrl: "Base URL",
     apiNotice: "API keys stay in local device storage for this prototype. For a public app, use a backend proxy instead.",
     costNotice: "Cost reference: if you use claude-sonnet-4-6 for a complete run, expect roughly $0.50 in API usage. Actual cost depends on answer length and provider pricing.",
+    localModeNotice: "No API key? Choose Free Local. The full interview, local summary, MBTI page, and polygon charts work on-device with no cloud model. Add an API key only when you want richer AI wording.",
+    apiOptionalNotice: "For paid providers, API key is optional. If left blank, MagicMirror automatically uses Free Local mode for summaries and results.",
+    localProviderName: "Free Local",
     startInterview: "START INTERVIEW",
     complete: "Complete",
     finalResults: "Final Results",
@@ -129,6 +132,9 @@ const COPY = {
     baseUrl: "Base URL",
     apiNotice: "此原型会把 API key 保存在本机设备存储中。正式公开发布时应使用后端代理。",
     costNotice: "费用参考：如果使用 claude-sonnet-4-6 跑完整流程，大约消耗 $0.50 API 费用。实际费用会随回答长度和供应商价格变化。",
+    localModeNotice: "没有 API key 也可以使用：选择 Free Local，完整访谈、本地总结、MBTI 页面和多边形图都在本机规则模式下运行。只有想要更细腻的 AI 文案时才需要填写 API key。",
+    apiOptionalNotice: "付费 provider 的 API key 也是可选的。如果留空，MagicMirror 会自动使用免费本地模式生成总结和结果。",
+    localProviderName: "免费本地模式",
     startInterview: "开始访谈",
     complete: "完成",
     finalResults: "最终结果",
@@ -212,11 +218,11 @@ type PolygonSection = {
 };
 
 const defaultConfig: AppConfig = {
-  providerId: "openai",
-  model: "gpt-5",
+  providerId: "local",
+  model: "local-rules",
   customModel: "",
   apiKey: "",
-  baseUrl: "https://api.openai.com/v1"
+  baseUrl: ""
 };
 
 const defaultSession: SessionState = {
@@ -984,6 +990,8 @@ export default function App() {
   const currentModule = GUIDE_MODULES[session.moduleIndex];
   const provider = getProvider(config.providerId);
   const text: CopyText = COPY[language];
+  const canUseRemoteModel = provider.kind !== "local" && (!provider.needsApiKey || Boolean(config.apiKey.trim()));
+  const isFreeLocalMode = provider.kind === "local" || !canUseRemoteModel;
   const openQuestions = useMemo(() => openQuestionsFor(session.moduleIndex), [session.moduleIndex]);
   const ratingQuestions = useMemo(() => ratingQuestionsFor(session.moduleIndex), [session.moduleIndex]);
   const yesNoQuestions = useMemo(() => yesNoQuestionsFor(session.moduleIndex), [session.moduleIndex]);
@@ -1050,13 +1058,6 @@ export default function App() {
   }, [session.moduleIndex, session.phase, session.openIndex]);
 
   const saveConfig = () => {
-    if (provider.needsApiKey && !config.apiKey.trim()) {
-      Alert.alert(
-        text.apiKeyRequiredTitle,
-        language === "zh" ? `${provider.name} ${text.apiKeyRequiredBody}` : `${provider.name} ${text.apiKeyRequiredBody}`
-      );
-      return;
-    }
     setIsConfigured(true);
   };
 
@@ -1128,6 +1129,17 @@ export default function App() {
     setBusy(true);
     setError("");
     const moduleAnswers = session.answers.filter((answer) => answer.moduleId === currentModule.id);
+    if (isFreeLocalMode) {
+      const analysis = localModuleAnalysis(session.moduleIndex, moduleAnswers, language);
+      setSession((previous) => ({
+        ...previous,
+        analyses: [...previous.analyses.filter((item) => item.moduleId !== currentModule.id), analysis],
+        phase: yesNoQuestions.length ? "validate" : "open",
+        validateIndex: 0
+      }));
+      setBusy(false);
+      return;
+    }
     try {
       const rawAnalysis = await analyzeModule(config, {
         title: currentModule.title,
@@ -1236,6 +1248,14 @@ export default function App() {
     const errors: string[] = [];
     let finalReport = "";
     let mbtiAssessment: MbtiAssessment | null = null;
+    if (isFreeLocalMode) {
+      finalReport = localFinalReport(session, language);
+      mbtiAssessment = normalizeMbtiAssessment(localMbtiAssessment(session, language));
+      setSession((previous) => ({ ...previous, finalReport, mbtiAssessment }));
+      setResultPage("portrait");
+      setBusy(false);
+      return;
+    }
     try {
       const report = await generateFinalReport(config, { answers: session.answers, analyses: session.analyses, language });
       finalReport = ensureReportDisclaimer(report, language);
@@ -1333,6 +1353,10 @@ export default function App() {
     if (!question || rephrasingKey) {
       return;
     }
+    if (isFreeLocalMode) {
+      setQuestionVariants((previous) => ({ ...previous, [key]: localRephraseQuestion(question, kind, language) }));
+      return;
+    }
     setRephrasingKey(key);
     setError("");
     const currentWording = displayQuestionFor(key, question);
@@ -1374,46 +1398,54 @@ export default function App() {
           <View style={styles.pickerFrame}>
             <Picker selectedValue={config.providerId} onValueChange={changeProvider}>
               {PROVIDERS.map((item) => (
-                <Picker.Item key={item.id} label={item.name} value={item.id} />
+                <Picker.Item key={item.id} label={item.id === "local" ? text.localProviderName : item.name} value={item.id} />
               ))}
             </Picker>
           </View>
 
-          <Text style={styles.label}>{text.model}</Text>
-          <View style={styles.pickerFrame}>
-            <Picker selectedValue={config.model} onValueChange={(model) => setConfig((previous) => ({ ...previous, model }))}>
-              {provider.models.map((model) => (
-                <Picker.Item key={model} label={model} value={model} />
-              ))}
-            </Picker>
+          <View style={styles.costNotice}>
+            <Text style={styles.costNoticeText}>{provider.kind === "local" ? text.localModeNotice : text.apiOptionalNotice}</Text>
           </View>
 
-          <Text style={styles.label}>{text.customModel}</Text>
-          <TextInput
-            style={styles.input}
-            value={config.customModel}
-            onChangeText={(customModel) => setConfig((previous) => ({ ...previous, customModel }))}
-            placeholder={text.optionalModel}
-            autoCapitalize="none"
-          />
+          {provider.kind !== "local" ? (
+            <>
+              <Text style={styles.label}>{text.model}</Text>
+              <View style={styles.pickerFrame}>
+                <Picker selectedValue={config.model} onValueChange={(model) => setConfig((previous) => ({ ...previous, model }))}>
+                  {provider.models.map((model) => (
+                    <Picker.Item key={model} label={model} value={model} />
+                  ))}
+                </Picker>
+              </View>
 
-          <Text style={styles.label}>{text.apiKey}</Text>
-          <TextInput
-            style={styles.input}
-            value={config.apiKey}
-            onChangeText={(apiKey) => setConfig((previous) => ({ ...previous, apiKey }))}
-            placeholder={provider.needsApiKey ? text.required : text.optional}
-            secureTextEntry
-            autoCapitalize="none"
-          />
+              <Text style={styles.label}>{text.customModel}</Text>
+              <TextInput
+                style={styles.input}
+                value={config.customModel}
+                onChangeText={(customModel) => setConfig((previous) => ({ ...previous, customModel }))}
+                placeholder={text.optionalModel}
+                autoCapitalize="none"
+              />
 
-          <Text style={styles.label}>{text.baseUrl}</Text>
-          <TextInput
-            style={styles.input}
-            value={config.baseUrl}
-            onChangeText={(baseUrl) => setConfig((previous) => ({ ...previous, baseUrl }))}
-            autoCapitalize="none"
-          />
+              <Text style={styles.label}>{text.apiKey}</Text>
+              <TextInput
+                style={styles.input}
+                value={config.apiKey}
+                onChangeText={(apiKey) => setConfig((previous) => ({ ...previous, apiKey }))}
+                placeholder={text.optional}
+                secureTextEntry
+                autoCapitalize="none"
+              />
+
+              <Text style={styles.label}>{text.baseUrl}</Text>
+              <TextInput
+                style={styles.input}
+                value={config.baseUrl}
+                onChangeText={(baseUrl) => setConfig((previous) => ({ ...previous, baseUrl }))}
+                autoCapitalize="none"
+              />
+            </>
+          ) : null}
 
           <View style={styles.notice}>
             <Text style={styles.noticeText}>
@@ -1421,9 +1453,11 @@ export default function App() {
             </Text>
           </View>
 
-          <View style={styles.costNotice}>
-            <Text style={styles.costNoticeText}>{text.costNotice}</Text>
-          </View>
+          {provider.id === "anthropic" ? (
+            <View style={styles.costNotice}>
+              <Text style={styles.costNoticeText}>{text.costNotice}</Text>
+            </View>
+          ) : null}
 
           <FeedbackButton style={styles.primaryButton} onPress={saveConfig} textStyle={styles.primaryButtonText}>
             {text.startInterview}

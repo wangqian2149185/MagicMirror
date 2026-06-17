@@ -1,4 +1,4 @@
-export type ProviderKind = "openai-compatible" | "anthropic" | "gemini" | "ollama";
+export type ProviderKind = "local" | "openai-compatible" | "anthropic" | "gemini" | "ollama";
 
 export type ProviderConfig = {
   id: string;

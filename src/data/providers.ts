@@ -2,6 +2,14 @@ import { ProviderConfig } from "../types";
 
 export const PROVIDERS: ProviderConfig[] = [
   {
+    id: "local",
+    name: "Free Local",
+    kind: "local",
+    baseUrl: "",
+    needsApiKey: false,
+    models: ["local-rules"]
+  },
+  {
     id: "openai",
     name: "OpenAI",
     kind: "openai-compatible",

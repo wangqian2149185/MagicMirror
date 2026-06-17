@@ -29,6 +29,9 @@ export const callModel = async (config: AppConfig, messages: ChatMessage[]) => {
   if (provider.needsApiKey && !config.apiKey.trim()) {
     throw new Error("This provider requires an API key.");
   }
+  if (provider.kind === "local") {
+    throw new Error("Free Local mode does not call a cloud model.");
+  }
 
   if (provider.kind === "anthropic") {
     const system = messages.find((message) => message.role === "system")?.content ?? "";
